@@ -1,5 +1,6 @@
 # packaging
 pip>=9
+pyenv
 setuptools>=26
 twine
 wheel>=0.29
@@ -7,23 +8,21 @@ wheel>=0.29
 # data science
 numpy
 pandas
-scikit-learn
+# scikit-learn
+
+# Data Sourcing
+requests
+bs4
 
 # tests/linter
-black
-coverage
-flake8
-pytest
-yapf
-
-# API
-gcsfs
-google-cloud-storage
-mlflow
-s3fs
+# black
+# coverage
+# flake8
+# pytest
+# yapf
 
 # utilities
 six>=1.14
-joblib
-memoized-property
-termcolor
+# joblib
+# memoized-property
+# termcolor

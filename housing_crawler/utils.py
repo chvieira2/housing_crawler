@@ -30,3 +30,18 @@ def save_file(df, file_name, local_file_path='housing_crawler/data/berlin'):
     local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'
     df.to_csv(local_path, index=False)
     print(f"===> {file_name} saved locally")
+
+dict_city_number = {
+            'Berlin': '8',
+            'Muenchen': '90',
+            'Stuttgart': '124',
+            'Koeln': '73',
+            'Hamburg': '55',
+            'Duesseldorf': '30',
+            'Bremen':'17',
+            'Leipzig':'77',
+            'Kiel':'71',
+            'Heidelberg':'59',
+            'Karlsruhe':'68',
+            'Hannover':'57'
+        }

@@ -3,12 +3,14 @@ import time
 import requests
 # import logging
 from bs4 import BeautifulSoup
+from urllib.request import Request, urlopen
 import pandas as pd
 import numpy as np
 
 from housing_crawler.abstract_crawler import Crawler
-from housing_crawler.string_utils import remove_prefix
-from housing_crawler.utils import save_file
+from housing_crawler.string_utils import remove_prefix, standardize_characters
+from housing_crawler.utils import save_file, get_file, dict_city_number
+from housing_crawler.geocoding_addresses import geocoding_df
 
 from config.config import ROOT_DIR
 
@@ -26,20 +28,7 @@ class CrawlWgGesucht(Crawler):
         self.existing_findings = []
 
         # The number after the name of the city is specific to the city
-        self.dict_city_number = {
-            'Berlin': '8',
-            'Muenchen': '90',
-            'Stuttgart': '124',
-            'Koeln': '73',
-            'Hamburg': '55',
-            'Duesseldorf': '30',
-            'Bremen':'17',
-            'Leipzig':'77',
-            'Kiel':'71',
-            'Heidelberg':'59',
-            'Karlsruhe':'68',
-            'Hannover':'57'
-        }
+        self.dict_city_number = dict_city_number
 
     def url_builder(self, location_name, page_number,
                     filters):
@@ -67,7 +56,7 @@ class CrawlWgGesucht(Crawler):
                 '-in-'+ location_name + '.' + self.dict_city_number.get(location_name) +\
                     filter_code + str(page_number) + '.html'
 
-    def get_soup_from_url(self, url, max_sleep_time = 5):
+    def get_soup_from_url(self, url, sleep_times = (1,2)):
         """
         Creates a Soup object from the HTML at the provided URL
 
@@ -77,8 +66,8 @@ class CrawlWgGesucht(Crawler):
         """
 
         # Sleeping for random seconds to avoid overload of requests
-        sleeptime = np.random.uniform(2, max_sleep_time)
-        print(f"sleeping for: {round(sleeptime,2)} seconds")
+        sleeptime = np.random.uniform(sleep_times[0], sleep_times[1])
+        print(f"Waiting {round(sleeptime,2)} seconds to try connecting to:\n{url}")
         time.sleep(sleeptime)
 
         # Setup an agent
@@ -88,12 +77,32 @@ class CrawlWgGesucht(Crawler):
         # First page load to set filters; response is discarded
         sess.get(url, headers=self.HEADERS)
         # Second page load
-        print(f"Crawling {url}")
+        print(f"Connecting to page...")
         resp = sess.get(url, headers=self.HEADERS)
         print(f"Got response code {resp.status_code}")
 
         # Return soup object
         return BeautifulSoup(resp.content, 'html.parser')
+
+    def get_soup_from_url_urllib(self, url, sleep_times = (1,2)):
+        """
+        Creates a Soup object from the HTML at the provided URL using urllib library.
+        Implemented as an alternative for requesting with requests' library Session. It doesn't seem to have worked however....
+        """
+
+        # Sleeping for random seconds to avoid overload of requests
+        sleeptime = np.random.uniform(sleep_times[0], sleep_times[1])
+        print(f"Waiting {round(sleeptime,2)} seconds to try connecting with urllib to:\n{url}")
+        time.sleep(sleeptime)
+
+        # Setup an agent
+        self.rotate_user_agent()
+
+        req = Request(url , headers=self.HEADERS)
+        webpage = urlopen(req).read()
+
+        # Return soup object
+        return BeautifulSoup(webpage, 'html.parser')
 
     def extract_data(self, soup):
         """Extracts all exposes from a provided Soup object"""
@@ -110,17 +119,6 @@ class CrawlWgGesucht(Crawler):
         """Parse through all exposes in self.existing_findings to return a formated dataframe.
         """
         # Process city name to match url
-        location_name = location_name.lower().replace(' ', '_')\
-            .replace('ã','a').replace('õ','o')\
-            .replace('á','a').replace('é','e').replace('í','i').replace('ó','o').replace('ú','u')\
-            .replace('ç','c')\
-            .replace('à','a').replace('è','e').replace('ì','i').replace('ò','o').replace('ù','u')\
-            .replace('â','a').replace('ê','e').replace('î','i').replace('ô','o').replace('û','u')\
-            .replace('ä','ae').replace('ë','e').replace('ï','i').replace('ö','oe').replace('ü','ue')\
-            .replace('ß','ss').replace('ñ','n')\
-            .replace('ī','i').replace('å','a').replace('æ','ae').replace('ø','o').replace('ÿ','y')\
-            .replace('š','s').replace('ý','y')\
-            .replace('ş','s').replace('ğ','g')
         location_name = location_name.capitalize()
 
         print(f'Processed location name. Searching for: {location_name}')
@@ -132,21 +130,55 @@ class CrawlWgGesucht(Crawler):
 
         print(f'Created {len(list_urls)} urls for crawling')
 
-        # Crawling each page and adding findings to
+        # Crawling each page and adding findings to self.new_findings list
         for url in list_urls:
+            # Extract findings with requests library
             soup = self.get_soup_from_url(url)
             new_findings = self.extract_data(soup)
+
+            # Try again with urllib library
             if len(new_findings) == 0:
-                print('====== Stopping retrieving pages. Stuck at Recaptcha ======')
-                break
+                soup = self.get_soup_from_url_urllib(url)
+                new_findings = self.extract_data(soup)
+                if len(new_findings) == 0:
+                    print('====== Stopped retrieving pages. Probably stuck at Recaptcha ======')
+                    break
+
             self.existing_findings = self.existing_findings + (new_findings)
 
+    def save_df(self, df, location_name):
+        ## First obtain older ads for updating table
+        try:
+            old_df = get_file(file_name=f'{location_name}_ads.csv',
+                            local_file_path=f'housing_crawler/data/{location_name}')
+            print('Obtained older ads')
+        except:
+            old_df = pd.DataFrame(columns = df.columns)
+            print('No older ads found')
+
+        # Exclude weird ads without an id number
+        df = df[df['id'] != 0]
+
+        # Add new ads to older list and discard copies
+        df = pd.concat([df,old_df]).drop_duplicates().reset_index(drop=True)
+        print(f'''{len(df)-len(old_df)} new ads were added to the list.\n
+                    There are now {len(df)} ads for {location_name}.''')
+
+        # Save updated list
+        save_file(df = df, file_name=f'{location_name}_ads.csv',
+                  local_file_path=f'housing_crawler/data/{location_name}')
+
     def crawl_all_pages(self, location_name, page_number,
-                    filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"]):
+                    filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
+                    path_save = None):
+        if path_save is None:
+            path_save = f'housing_crawler/data/{location_name}'
+
+        # Lower and change German characters to international (ä=ae, ö=oe,ü=ue,ß=ss)
+        location_name = standardize_characters(location_name)
 
         # Obtaining pages
-        if len(self.existing_findings) == 0:
-            self.parse_urls(location_name = location_name, page_number = page_number,
+        self.parse_urls(location_name = location_name, page_number = page_number,
                     filters = filters)
 
         # Extracting info of interest from pages
@@ -195,6 +227,22 @@ class CrawlWgGesucht(Crawler):
             if len(size) == 0:
                 size = [0]
 
+            ## Find publication date
+            # Minutes and hours are in color green (#218700), while days are in color grey (#898989)
+            try:
+                published_time = row.find("div", {"class": "col-xs-9"})\
+            .find("span", {"style": "color: #218700;"}).text
+            except:
+                published_time = row.find("div", {"class": "col-xs-9"})\
+            .find("span", {"style": "color: #898989;"}).text
+
+            # Format it for the date ignoring time
+            if 'Minuten' in published_time or 'Stunden' in published_time:
+                published_time = time.strftime("%d.%m.%Y", time.localtime())
+            else:
+                published_time = published_time.split(' ')[1]
+
+            # Create dataframe with info
             details = {
                 'id': int(ad_url.split('.')[-2]),
                 # 'image': image,
@@ -208,27 +256,40 @@ class CrawlWgGesucht(Crawler):
                 'male flatmates': flatmates_list[1],
                 'female flatmates': flatmates_list[2],
                 'diverse flatmates': flatmates_list[3],
+                'published on': published_time,
                 'address': address,
                 'crawler': 'WG-Gesucht'
             }
             if len(dates) == 2:
-                details['from'] = dates[0]
-                details['to'] = dates[1]
+                details['available from'] = dates[0]
+                details['available to'] = dates[1]
             elif len(dates) == 1:
-                details['from'] = dates[0]
-                details['to'] = 'open end'
+                details['available from'] = dates[0]
+                details['available to'] = 'open end'
 
-            entries.append(details)
+                entries.append(details)
 
             # self.__log__.debug('extracted: %s', entries)
 
+        # Reset existing_findings
+        self.existing_findings = []
+
         df = pd.DataFrame(entries)
-        save_file(df = df, file_name=f'{location_name}.csv', local_file_path=f'housing_crawler/data/{location_name}')
 
+        if len(df)>0:
+            # Geocode coordinates of ad
+            df = geocoding_df(df=df, column='address')
 
+            # Save info as df in csv format
+            self.save_df(df=df, location_name=location_name)
+        else:
+            print('===== Stuck on Recaptch =====')
         return df
 
 if __name__ == "__main__":
     test = CrawlWgGesucht()
-    print(test.crawl_all_pages(location_name = 'Berlin', page_number = 20,
-                    filters = ["wg-zimmer"]))
+    # test.crawl_all_pages(location_name = 'berlin', page_number = 3,
+    #                 filters = ["wg-zimmer"])
+    for city in list(dict_city_number.keys()):
+        test.crawl_all_pages(location_name = city, page_number = 50,
+                    filters = ["wg-zimmer"])

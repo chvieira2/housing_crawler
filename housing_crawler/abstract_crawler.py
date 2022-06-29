@@ -33,6 +33,7 @@ class Crawler:
         'Sec-Fetch-User': '?1',
         'Sec-Fetch-Dest': 'document',
         'Accept-Language': 'en-US,en;q=0.9',
+        'referer':'https://www.google.com/'
     }
 
     def rotate_user_agent(self):

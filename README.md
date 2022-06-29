@@ -1,4 +1,4 @@
-Housing_crawler was created by [Carlos H. Vieira e Vieira](https://github.com/chvieira2). This webscrapper was designed to parse through wg-gesucht.de search pages and save ads as .csv files.
+Housing_crawler was created by [chvieira2](https://github.com/chvieira2). This webscrapper was designed to parse through wg-gesucht.de search pages and save ads as .csv files.
 
 ## How to use it
 1) Download this repository.

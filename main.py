@@ -8,7 +8,7 @@ import os
 # import time
 from pprint import pformat
 
-from housing_crawler.crawl_wggesucht import CrawlWgGesucht
+from housing_crawler.crawl_wggesucht_old import CrawlWgGesucht
 
 __author__ = "Carlos Henrique Vieira e Vieira"
 __version__ = "1.0"

@@ -31,7 +31,7 @@ def save_file(df, file_name, local_file_path='housing_crawler/data/berlin'):
     df.to_csv(local_path, index=False)
     print(f"===> {file_name} saved locally")
 
-dict_city_number = {
+dict_city_number_wggesucht = {
             'Berlin': '8',
             'Muenchen': '90',
             'Stuttgart': '124',

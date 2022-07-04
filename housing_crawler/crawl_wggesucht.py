@@ -1,3 +1,4 @@
+from cmath import isnan
 import re
 import time
 import requests
@@ -9,9 +10,10 @@ import pandas as pd
 import numpy as np
 
 from housing_crawler.abstract_crawler import Crawler
-from housing_crawler.string_utils import remove_prefix, standardize_characters, capitalize_city_name, german_characters
-from housing_crawler.utils import save_file, get_file, dict_city_number_wggesucht
-from housing_crawler.geocoding_addresses import geocoding_df
+from housing_crawler.string_utils import remove_prefix, simplify_address, standardize_characters, capitalize_city_name, german_characters
+from housing_crawler.utils import save_file, get_file
+from housing_crawler.params import dict_city_number_wggesucht
+from housing_crawler.geocoding_addresses import geocoding_address
 
 from config.config import ROOT_DIR
 
@@ -79,6 +81,8 @@ class CrawlWgGesucht(Crawler):
         print(f"Got response code {resp.status_code}")
 
         # Return soup object
+        if resp.status_code != 200:
+            return None
         return BeautifulSoup(resp.content, 'html.parser')
 
     def get_soup_from_url_urllib(self, url, sleep_times = (1,2)):
@@ -117,6 +121,8 @@ class CrawlWgGesucht(Crawler):
         Extract findings with requests library
         '''
         soup = self.get_soup_from_url(url, sess=sess)
+        if soup is None:
+            return None
         return self.extract_data(soup)
 
     def parse_urls(self, location_name, number_pages, filters, sleep_time = 1800):
@@ -148,8 +154,11 @@ class CrawlWgGesucht(Crawler):
                 success = False
                 while not success:
                     new_findings = self.request_soup(url, sess=sess)
-                    if len(new_findings) == 0:
-                        print(f'Sleeping for {sleep_time} to wait for reCAPTCH to disappear....')
+                    if new_findings is None:
+                        pass
+                    elif len(new_findings) == 0:
+                        time_now = time.mktime(time.localtime())
+                        print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for reCAPTCH to disappear....')
                         time.sleep(sleep_time)
                         sleep_time += sleep_time
                     else:
@@ -179,6 +188,11 @@ class CrawlWgGesucht(Crawler):
 
         # Exclude weird ads without an id number
         df = df[df['id'] != 0]
+
+        # Make sure new df and old df have same columns
+        for new_column in old_df.columns:
+            if new_column not in df.columns:
+                df[new_column] = np.nan
 
         # Add new ads to older list and discard copies
         df = pd.concat([df,old_df]).drop_duplicates().reset_index(drop=True)
@@ -256,7 +270,11 @@ class CrawlWgGesucht(Crawler):
             # Address
             address = details_array[2].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')\
                 + ', ' + details_array[1].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')
-            address = address.replace('"','')
+
+            address = simplify_address(address)
+
+            # Latitude and longitude
+            lat, lon = geocoding_address(address)
 
             # Flatmates
             try:
@@ -345,10 +363,12 @@ class CrawlWgGesucht(Crawler):
                 'female_flatmates': int(flatmates_list[2]),
                 'diverse_flatmates': int(flatmates_list[3]),
                 'published_on': str(published_date),
-                'published_at': published_time,
+                'published_at': np.nan if pd.isnan(published_time) else int(published_time),
                 'address': str(address),
                 'city': str(german_characters(location_name)),
-                'crawler': 'WG-Gesucht'
+                'crawler': 'WG-Gesucht',
+                'latitude': np.nan if pd.isnan(lat) else float(lat),
+                'longitude': np.nan if pd.isnan(lon) else float(lon)
             }
             if len(availability_dates) == 2:
                 details['available from'] = str(availability_dates[0])
@@ -377,7 +397,7 @@ class CrawlWgGesucht(Crawler):
             print('===== Something went wrong. No entries were found. =====')
         return df
 
-    def long_search(self, day_stop_search = None, pages_per_search = 30):
+    def long_search(self, day_stop_search = None, pages_per_search = 100, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''
@@ -407,14 +427,17 @@ class CrawlWgGesucht(Crawler):
 
             # Check if between 00 and 8am, and sleep in case it is. This is because most ads are posted during the day and there's seldom need to run overnight.
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
-            while hour_of_search > 0 and hour_of_search < 8:
+            while hour_of_search > 9 and hour_of_search < 8:
                 hour_of_search = int(time.strftime(f"%H", time.localtime()))
                 print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am.')
                 time.sleep(3600)
 
             # Starts the search
             cities_to_search = list(dict_city_number_wggesucht.keys())
-            for city in cities_to_search[-4:]:
+            for city in cities_to_search[::-1]:#[start_search_from_index:]:
+                if city == 'regensburg':
+                    pass
+                print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
                 self.crawl_all_pages(location_name = city, number_pages = pages_per_search,
                             filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"])
 
@@ -422,23 +445,3 @@ class CrawlWgGesucht(Crawler):
 
 if __name__ == "__main__":
     CrawlWgGesucht().long_search()
-
-    # test.crawl_all_pages(location_name = 'Aachen', number_pages = 1,
-    #                 filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"])
-
-
-    # today = time.strftime(f"%d.%m.%Y", time.localtime())
-    # day_stop_search = '31.07.2022'
-    # while today != day_stop_search:
-    #     today = time.strftime(f"%d.%m.%Y", time.localtime())
-
-    #     # Check if between 00 and 8am, and sleep in case it is
-    #     hour_of_search = int(time.strftime(f"%H", time.localtime()))
-    #     while hour_of_search >= 0 and hour_of_search <= 8:
-    #         hour_of_search = int(time.strftime(f"%H", time.localtime()))
-    #         print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am.')
-    #         time.sleep(3600)
-
-    #     for city in list(dict_city_number_wggesucht.keys())[0:]:
-    #         test.crawl_all_pages(location_name = city, page_number = 10,
-    #                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"])

@@ -14,7 +14,7 @@ def create_dir(path):
 
 def get_file(file_name, local_file_path='data/berlin'):
     """
-    Method to get the training data (or a portion of it) from local environment
+    Method to get data (or a portion of it) from local environment and return a dataframe
     """
     # try:
     local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'

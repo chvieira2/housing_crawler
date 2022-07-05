@@ -5,7 +5,6 @@ import requests
 import json
 # import logging
 from bs4 import BeautifulSoup
-from urllib.request import Request, urlopen
 import pandas as pd
 import numpy as np
 
@@ -85,26 +84,6 @@ class CrawlWgGesucht(Crawler):
             return None
         return BeautifulSoup(resp.content, 'html.parser')
 
-    def get_soup_from_url_urllib(self, url, sleep_times = (1,2)):
-        """
-        Creates a Soup object from the HTML at the provided URL using urllib library.
-        Implemented as an alternative for requesting with requests' library Session. It doesn't seem to have worked however....
-        """
-
-        # Sleeping for random seconds to avoid overload of requests
-        sleeptime = np.random.uniform(sleep_times[0], sleep_times[1])
-        print(f"Waiting {round(sleeptime,2)} seconds to try connecting with urllib to:\n{url}")
-        time.sleep(sleeptime)
-
-        # Setup an agent
-        self.rotate_user_agent()
-
-        req = Request(url , headers=self.HEADERS)
-        webpage = urlopen(req).read()
-
-        # Return soup object
-        return BeautifulSoup(webpage, 'html.parser')
-
     def extract_data(self, soup):
         """Extracts all exposes from a provided Soup object"""
 
@@ -125,7 +104,7 @@ class CrawlWgGesucht(Crawler):
             return None
         return self.extract_data(soup)
 
-    def parse_urls(self, location_name, number_pages, filters, sleep_time = 1800):
+    def parse_urls(self, location_name, page_number, filters, sess, sleep_time = 1800):
         """Parse through all exposes in self.existing_findings to return a formated dataframe.
         """
         # Process city name to match url
@@ -133,19 +112,11 @@ class CrawlWgGesucht(Crawler):
 
         print(f'Processed location name. Searching for: {location_name}')
 
-
         # Create list with all urls for crawling
-        list_urls = [self.url_builder(location_name = location_name, page_number = page,
-                    filters = filters) for page in range(number_pages)]
+        list_urls = [self.url_builder(location_name = location_name, page_number = page_number,
+                    filters = filters)]
 
-        print(f'Created {len(list_urls)} urls for crawling')
-
-        print('Opening session')
-        sess = requests.session()
-        # First page load to set filters; response is discarded
-        print('Making first call to set filters')
-        sess.get(list_urls[0], headers=self.HEADERS)
-
+        print(f'Created url for crawling')
 
         # Crawling each page and adding findings to self.new_findings list
         for url in list_urls:
@@ -166,10 +137,6 @@ class CrawlWgGesucht(Crawler):
             else:
                 new_findings = self.request_soup(url)
 
-                # # Try again with urllib library
-                # if len(new_findings) == 0:
-                #     soup = self.get_soup_from_url_urllib(url)
-                #     new_findings = self.extract_data(soup)
             if len(new_findings) == 0:
                 print('====== Stopped retrieving pages. Probably stuck at Recaptcha ======')
                 break
@@ -194,14 +161,15 @@ class CrawlWgGesucht(Crawler):
             if new_column not in df.columns:
                 df[new_column] = np.nan
 
-        # Add new ads to older list and discard copies
-        df = pd.concat([df,old_df]).drop_duplicates().reset_index(drop=True)
+        # Add new ads to older list and discard copies. Keep = first is important because wg-gesucht keeps on refreshing the post date of some ads (private paid ads?). With keep = first I keep the first entry
+        df = pd.concat([df,old_df]).drop_duplicates(subset='id', keep="last").reset_index(drop=True)
         print(f'''{len(df)-len(old_df)} new ads were added to the list.\n
                     There are now {len(df)} ads in {location_name}_ads.csv.''')
 
         # Save updated list
         save_file(df = df, file_name=f'{location_name}_ads.csv',
                   local_file_path=f'housing_crawler/data/{location_name}/Ads')
+        return len(df)-len(old_df)
 
     def crawl_all_pages(self, location_name, number_pages,
                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
@@ -212,192 +180,215 @@ class CrawlWgGesucht(Crawler):
         if path_save is None:
             path_save = f'housing_crawler/data/{standardize_characters(location_name)}/Ads'
 
-        # Obtaining pages
-        self.parse_urls(location_name = location_name, number_pages = number_pages,
+        print('Opening session')
+        sess = requests.session()
+        # First page load to set filters; response is discarded
+        print('Making first call to set filters')
+        url_set_filters = self.url_builder(location_name = location_name, page_number = 1,
                     filters = filters)
+        sess.get(url_set_filters, headers=self.HEADERS)
+
+        zero_new_ads_in_a_row = 0
+        total_added_findings = 0
+        for page_number in range(number_pages):
+            # Obtaining pages
+            self.parse_urls(location_name = location_name, page_number= page_number,
+                        filters = filters, sess=sess)
 
 
-        # Obtain older ads, or create empty table if there are no older ads
-        try:
-            old_df = get_file(file_name=f'{location_name}_ads.csv',
-                            local_file_path=f'housing_crawler/data/{location_name}/Ads')
-        except FileNotFoundError:
-            old_df=pd.DataFrame({'url':[]})
-
-
-        # Extracting info of interest from pages
-        print(f"Crawling {len(self.existing_findings)} ads")
-        entries = []
-        for row in self.existing_findings:
-
-            ### Commercial offers from companies, often with several rooms in same building
+            # Obtain older ads, or create empty table if there are no older ads
             try:
-                test_text = row.find("div", {"class": "col-xs-9"})\
-            .find("span", {"class": "label_verified ml5"}).text
-                landlord_type = test_text.replace(' ','').replace('"','').replace('\n','').replace('\t','').replace(';','')
-            except AttributeError:
-                landlord_type = 'Private'
+                old_df = get_file(file_name=f'{location_name}_ads.csv',
+                                local_file_path=f'housing_crawler/data/{location_name}/Ads')
+            except FileNotFoundError:
+                old_df=pd.DataFrame({'url':[]})
 
-            # Ad title and url
-            title_row = row.find('h3', {"class": "truncate_title"})
-            title = title_row.text.strip().replace('"','').replace('\n',' ').replace('\t',' ')\
-                .replace(';','')
-            ad_url = self.base_url + remove_prefix(title_row.find('a')['href'], "/")
 
-            # Save time by not parsing old ads
-            # To check if add is old, check if the url already exist in the table
-            if ad_url in old_df['url']:
-                pass
+            # Extracting info of interest from pages
+            print(f"Crawling {len(self.existing_findings)} ads")
+            entries = []
+            total_findings = len(self.existing_findings)
+            for index in range(total_findings):
+                # Print count down
+                print(f'=====> Geocoded {index+1}/{total_findings}', end='\r')
+                row = self.existing_findings[index]
 
-            ## Room details and address
-            detail_string = row.find("div", {"class": "col-xs-11"}).text.strip().split("|")
-            details_array = list(map(lambda s: re.sub(' +', ' ',
-                                                    re.sub(r'\W', ' ', s.strip())),
-                                    detail_string))
+                ### Commercial offers from companies, often with several rooms in same building
+                try:
+                    test_text = row.find("div", {"class": "col-xs-9"})\
+                .find("span", {"class": "label_verified ml5"}).text
+                    landlord_type = test_text.replace(' ','').replace('"','').replace('\n','').replace('\t','').replace(';','')
+                except AttributeError:
+                    landlord_type = 'Private'
 
-            # Offer type
-            type_offer = details_array[0]
+                # Ad title and url
+                title_row = row.find('h3', {"class": "truncate_title"})
+                title = title_row.text.strip().replace('"','').replace('\n',' ').replace('\t',' ')\
+                    .replace(';','')
+                ad_url = self.base_url + remove_prefix(title_row.find('a')['href'], "/")
 
-            # Number of rooms
-            rooms_tmp = re.findall(r"^\d*[., ]?\d*", details_array[0])[0] # Finds int or dec in beginning of word. Needed to deal with '2.5', '2,5' or '2 5' sized flats
-            rooms_tmp = float(rooms_tmp.replace(',','.').replace(' ','.'))
-            if 'WG' in type_offer:
-                type_offer = 'WG'
-                rooms = 1
-            else:
-                rooms = rooms_tmp if rooms_tmp>0 else 0
-
-            # Address
-            address = details_array[2].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')\
-                + ', ' + details_array[1].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')
-
-            address = simplify_address(address)
-
-            # Latitude and longitude
-            lat, lon = geocoding_address(address)
-
-            # Flatmates
-            try:
-                flatmates = row.find("div", {"class": "col-xs-11"}).find("span", {"class": "noprint"})['title']
-                flatmates_list = [int(n) for n in re.findall('[0-9]+', flatmates)]
-            except TypeError:
-                flatmates_list = [0,0,0,0]
-
-            ### Price, size and date
-            numbers_row = row.find("div", {"class": "middle"})
-
-            # Price
-            price = numbers_row.find("div", {"class": "col-xs-3"}).text.strip().split(' ')[0]
-            # Prevent n.a. entries in price
-            try:
-                int(price)
-            except ValueError:
-                price = 0
-
-            # Offer availability dates
-            availability_dates = re.findall(r'\d{2}.\d{2}.\d{4}',
-                            numbers_row.find("div", {"class": "text-center"}).text)
-
-            # Size
-            size = re.findall(r'\d{1,4}\sm²',
-                            numbers_row.find("div", {"class": "text-right"}).text)
-            if len(size) == 0:
-                size = ['0']
-
-            size = re.findall('^\d+', size[0])[0]
-
-            ## Publication date and time
-            # Seconds, minutes and hours are in color green (#218700), while days are in color grey (#898989)
-            try:
-                published_date = row.find("div", {"class": "col-xs-9"})\
-            .find("span", {"style": "color: #218700;"}).text
-            except:
-                published_date = row.find("div", {"class": "col-xs-9"})\
-            .find("span", {"style": "color: #898989;"}).text
-
-            # For ads published mins or secs ago, publication time is the time of the search
-            hour_of_search = int(time.strftime(f"%H", time.localtime()))
-            if 'Minut' in published_date or 'Sekund' in published_date:
-                published_date = time.strftime("%d.%m.%Y", time.localtime())
-                published_time = hour_of_search
-
-            # For ads published hours ago, publication time is the time of search minus the hours difference. That might lead to negative time of the day and that's corrected below. That could also lead to publication date of 00, and that's also corrected below.
-            elif 'Stund' in published_date:
-                hour_diff = int(re.findall('[0-9]+', published_date)[0])
-                published_time = hour_of_search - hour_diff
-                if published_time < 0:
-                    # Fix publication hour
-                    published_time = 24 + published_time
-                    # Fix publication date to the day before the day of the search
-                    published_date = time.strftime("%d.%m.%Y", time.localtime(time.mktime(time.localtime())-24*60*60))
-
+                # Save time by not parsing old ads
+                # To check if add is old, check if the url already exist in the table
+                if ad_url in old_df['url']:
+                    pass
                 else:
-                    published_date = time.strftime("%d.%m.%Y", time.localtime())
+                    ## Room details and address
+                    detail_string = row.find("div", {"class": "col-xs-11"}).text.strip().split("|")
+                    details_array = list(map(lambda s: re.sub(' +', ' ',
+                                                            re.sub(r'\W', ' ', s.strip())),
+                                            detail_string))
 
-            # For ads published days ago, publication time is NaN
-            elif 'Tag' in published_date:
-                day_diff = int(re.findall('[0-9]+', published_date)[0])
-                published_date = time.strftime("%d.%m.%Y", time.localtime(time.mktime(time.localtime())-day_diff*24*60*60))
-                published_time = np.nan
+                    # Offer type
+                    type_offer = details_array[0]
 
-            # For ads published at specified date (ads older than 5 days), publication time is NaN
+                    # Number of rooms
+                    rooms_tmp = re.findall(r"^\d*[., ]?\d*", details_array[0])[0] # Finds int or dec in beginning of word. Needed to deal with '2.5', '2,5' or '2 5' sized flats
+                    rooms_tmp = float(rooms_tmp.replace(',','.').replace(' ','.'))
+                    if 'WG' in type_offer:
+                        type_offer = 'WG'
+                        rooms = 1
+                    else:
+                        rooms = rooms_tmp if rooms_tmp>0 else 0
+
+                    # Address
+                    address = details_array[2].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')\
+                        + ', ' + details_array[1].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')
+
+                    address = simplify_address(address)
+
+                    # Latitude and longitude
+                    # lat, lon = geocoding_address(address)
+                    # time.sleep(0.5)
+                    lat,lon = np.nan,np.nan
+
+                    # Flatmates
+                    try:
+                        flatmates = row.find("div", {"class": "col-xs-11"}).find("span", {"class": "noprint"})['title']
+                        flatmates_list = [int(n) for n in re.findall('[0-9]+', flatmates)]
+                    except TypeError:
+                        flatmates_list = [0,0,0,0]
+
+                    ### Price, size and date
+                    numbers_row = row.find("div", {"class": "middle"})
+
+                    # Price
+                    price = numbers_row.find("div", {"class": "col-xs-3"}).text.strip().split(' ')[0]
+                    # Prevent n.a. entries in price
+                    try:
+                        int(price)
+                    except ValueError:
+                        price = 0
+
+                    # Offer availability dates
+                    availability_dates = re.findall(r'\d{2}.\d{2}.\d{4}',
+                                    numbers_row.find("div", {"class": "text-center"}).text)
+
+                    # Size
+                    size = re.findall(r'\d{1,4}\sm²',
+                                    numbers_row.find("div", {"class": "text-right"}).text)
+                    if len(size) == 0:
+                        size = ['0']
+
+                    size = re.findall('^\d+', size[0])[0]
+
+                    ## Publication date and time
+                    # Seconds, minutes and hours are in color green (#218700), while days are in color grey (#898989)
+                    try:
+                        published_date = row.find("div", {"class": "col-xs-9"})\
+                    .find("span", {"style": "color: #218700;"}).text
+                    except:
+                        published_date = row.find("div", {"class": "col-xs-9"})\
+                    .find("span", {"style": "color: #898989;"}).text
+
+                    # For ads published mins or secs ago, publication time is the time of the search
+                    hour_of_search = int(time.strftime(f"%H", time.localtime()))
+                    if 'Minut' in published_date or 'Sekund' in published_date:
+                        published_date = time.strftime("%d.%m.%Y", time.localtime())
+                        published_time = hour_of_search
+
+                    # For ads published hours ago, publication time is the time of search minus the hours difference. That might lead to negative time of the day and that's corrected below. That could also lead to publication date of 00, and that's also corrected below.
+                    elif 'Stund' in published_date:
+                        hour_diff = int(re.findall('[0-9]+', published_date)[0])
+                        published_time = hour_of_search - hour_diff
+                        if published_time < 0:
+                            # Fix publication hour
+                            published_time = 24 + published_time
+                            # Fix publication date to the day before the day of the search
+                            published_date = time.strftime("%d.%m.%Y", time.localtime(time.mktime(time.localtime())-24*60*60))
+
+                        else:
+                            published_date = time.strftime("%d.%m.%Y", time.localtime())
+
+                    # For ads published days ago, publication time is NaN
+                    elif 'Tag' in published_date:
+                        day_diff = int(re.findall('[0-9]+', published_date)[0])
+                        published_date = time.strftime("%d.%m.%Y", time.localtime(time.mktime(time.localtime())-day_diff*24*60*60))
+                        published_time = np.nan
+
+                    # For ads published at specified date (ads older than 5 days), publication time is NaN
+                    else:
+                        published_date = published_date.split(' ')[1]
+                        published_time = np.nan
+
+
+
+                    ### Create dataframe with info
+                    details = {
+                        'id': int(ad_url.split('.')[-2]),
+                        'url': str(ad_url),
+                        'type_offer': str(type_offer),
+                        'landlord_type': str(landlord_type),
+                        'title': str(title),
+                        'price_euros': int(price),
+                        'size_sqm': int(size),
+                        'available_rooms': float(rooms),
+                        'WG_size': int(flatmates_list[0]),
+                        'available_spots_wg': int(flatmates_list[0]-flatmates_list[1]-flatmates_list[2]-flatmates_list[3]),
+                        'male_flatmates': int(flatmates_list[1]),
+                        'female_flatmates': int(flatmates_list[2]),
+                        'diverse_flatmates': int(flatmates_list[3]),
+                        'published_on': str(published_date),
+                        'published_at': np.nan if pd.isnull(published_time) else int(published_time),
+                        'address': str(address),
+                        'city': str(german_characters(location_name)),
+                        'crawler': 'WG-Gesucht',
+                        'latitude': np.nan if pd.isnull(lat) else float(lat),
+                        'longitude': np.nan if pd.isnull(lon) else float(lon)
+                    }
+                    if len(availability_dates) == 2:
+                        details['available from'] = str(availability_dates[0])
+                        details['available to'] = str(availability_dates[1])
+                    elif len(availability_dates) == 1:
+                        details['available from'] = str(availability_dates[0])
+                        details['available to'] = np.nan
+
+                    entries.append(details)
+
+            # Reset existing_findings
+            self.existing_findings = []
+
+            # Create the dataframe
+            df = pd.DataFrame(entries)
+
+            if len(df)>0:
+                # Save info as df in csv format
+                ads_added = self.save_df(df=df, location_name=standardize_characters(location_name))
+                total_added_findings = total_added_findings + ads_added
+                if int(ads_added) == 0:
+                    zero_new_ads_in_a_row += 1
+                    print(f'{zero_new_ads_in_a_row} pages with no new ads added in a series')
+                else:
+                    zero_new_ads_in_a_row = 0
             else:
-                published_date = published_date.split(' ')[1]
-                published_time = np.nan
+                print('===== Something went wrong. No entries were found. =====')
+
+            if zero_new_ads_in_a_row >=5:
+                break
+
+        print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv =========')
 
 
-
-            ### Create dataframe with info
-            details = {
-                'id': int(ad_url.split('.')[-2]),
-                'url': str(ad_url),
-                'type_offer': str(type_offer),
-                'landlord_type': str(landlord_type),
-                'title': str(title),
-                'price_euros': int(price),
-                'size_sqm': int(size),
-                'available_rooms': float(rooms),
-                'WG_size': int(flatmates_list[0]),
-                'available_spots_wg': int(flatmates_list[0]-flatmates_list[1]-flatmates_list[2]-flatmates_list[3]),
-                'male_flatmates': int(flatmates_list[1]),
-                'female_flatmates': int(flatmates_list[2]),
-                'diverse_flatmates': int(flatmates_list[3]),
-                'published_on': str(published_date),
-                'published_at': np.nan if pd.isnan(published_time) else int(published_time),
-                'address': str(address),
-                'city': str(german_characters(location_name)),
-                'crawler': 'WG-Gesucht',
-                'latitude': np.nan if pd.isnan(lat) else float(lat),
-                'longitude': np.nan if pd.isnan(lon) else float(lon)
-            }
-            if len(availability_dates) == 2:
-                details['available from'] = str(availability_dates[0])
-                details['available to'] = str(availability_dates[1])
-            elif len(availability_dates) == 1:
-                details['available from'] = str(availability_dates[0])
-                details['available to'] = np.nan
-
-            entries.append(details)
-
-            # self.__log__.debug('extracted: %s', entries)
-
-        # Reset existing_findings
-        self.existing_findings = []
-
-        # Create the dataframe
-        df = pd.DataFrame(entries)
-
-        if len(df)>0:
-            # Geocode coordinates of ad
-            # df = geocoding_df(df=df, column='address')
-
-            # Save info as df in csv format
-            self.save_df(df=df, location_name=standardize_characters(location_name))
-        else:
-            print('===== Something went wrong. No entries were found. =====')
-        return df
-
-    def long_search(self, day_stop_search = None, pages_per_search = 100, start_search_from_index = 0):
+    def long_search(self, day_stop_search = None, pages_per_search = 40, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''
@@ -434,9 +425,7 @@ class CrawlWgGesucht(Crawler):
 
             # Starts the search
             cities_to_search = list(dict_city_number_wggesucht.keys())
-            for city in cities_to_search[::-1]:#[start_search_from_index:]:
-                if city == 'regensburg':
-                    pass
+            for city in cities_to_search[start_search_from_index:]:
                 print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
                 self.crawl_all_pages(location_name = city, number_pages = pages_per_search,
                             filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"])
@@ -445,3 +434,9 @@ class CrawlWgGesucht(Crawler):
 
 if __name__ == "__main__":
     CrawlWgGesucht().long_search()
+    # CrawlWgGesucht().crawl_all_pages('Stuttgart', 100)
+
+    # df = get_file(file_name=f'berlin_ads.csv',
+    #                         local_file_path=f'housing_crawler/data/berlin/Ads')
+
+    # CrawlWgGesucht().save_df(df, 'berlin')

@@ -70,8 +70,8 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
                         city_name = address.split(',')[2].strip().replace('  ', ' ')
                         address_without_neigh = ', '.join([street_number, city_name]).strip().replace('  ', ' ')
                         print(f'Search did not work with "{address}". Trying with "{address_without_neigh}"')
-                        lat,lon = geocoding_address(address=address_without_neigh)
                         time.sleep(sleep_time_between_addresses)
+                        lat,lon = geocoding_address(address=address_without_neigh)
                     except IndexError:
                         print(f'Weird address format: "{address}"')
                         pass

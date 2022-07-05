@@ -12,11 +12,12 @@ def fix_weird_address(address, weird_patterns = ['Am S Bahnhof', 'xxx', 'xx', 'N
         address = address.replace(weird, '').strip().replace('  ', ' ')
 
     # Correcting mispelling input from users is a never ending job....
-    return address.replace('kungerstrasse', 'kunger strasse').replace('nummer zwei', '2')\
-        .replace('srasse','strasse').replace('strs ','strasse').replace('str ','strasse').replace('Strs ','Strasse').replace('Str ','Strasse').replace('strs,','strasse,').replace('str,','strasse,').replace('Strs,','Strasse,').replace('Str,','Strasse,').replace('stasse,','strasse,').replace('Stasse,','Strasse,')\
+    return address.replace(' ,', ',')\
+        .replace('srasse','strasse').replace('strs,','strasse,').replace('str,','strasse,').replace('Strs,','Strasse,').replace('Str,','Strasse,').replace('stasse,','strasse,').replace('Stasse,','Strasse,').replace('Strß,','Straße,')\
         .replace('Alle ', 'Allee ').replace('alle ', 'Allee ').replace('Alle,', 'Allee,').replace('alle,', 'Allee,').replace('feder','felder')\
+        .replace('kungerstrasse', 'kunger strasse').replace('nummer zwei', '2')\
         .replace('Schonehauser', 'Schönhauser').replace('Warschschauer','Warschauer')\
-            .replace('Dunkerstraße','Dunckerstraße').replace('Reinstraße','Rheinstraße')\
+        .replace('Dunkerstraße','Dunckerstraße').replace('Reinstraße','Rheinstraße')\
         .replace('Neltstraße', 'Neltestraße').replace('Camebridger', 'Cambridger')\
         .replace('Koperniskusstraße', 'Kopernikusstraße').replace('Düsseldoffer', 'Düsseldorfer')\
         .replace('Borndorfer','Bornsdorfer')

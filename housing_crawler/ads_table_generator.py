@@ -6,6 +6,7 @@ The goal of this module is to collect all ads from all cities into a unified csv
 import pandas as pd
 import numpy as np
 import time
+import re
 
 
 from housing_crawler.geocoding_addresses import geocoding_address, fix_weird_address
@@ -46,22 +47,38 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
 
 
             address = df_city['address'].iloc[index]
-            address = address.strip().replace('  ', ' ').replace(' ,', ',')
-            address = fix_weird_address(address)
+            address = fix_weird_address(address).strip().replace('  ', ' ').replace(' ,', ',')
             lat = df_city['latitude'].iloc[index]
             index_lat = list(df_city.columns).index('latitude')
             index_lon = list(df_city.columns).index('longitude')
-            if pd.isnull(lat):
+            if pd.isnull(lat) or lat == 0:
                 lat, lon = geocoding_address(address)
 
+                # Try again with shorter address
                 if pd.isnull(lat) or pd.isnull(lon):
-                    street_number = address.split(',')[0].strip().replace('  ', ' ')
-                    city_name = address.split(',')[2].strip().replace('  ', ' ')
-                    address_without_neigh = ', '.join([street_number, city_name]).strip().replace('  ', ' ')
-                    print(f'Search did not work with "{address}". Trying with "{address_without_neigh}"')
-                    lat,lon = geocoding_address(address=address_without_neigh)
+                    # Test if there's a mispelling of lack of space in between street and house number
+                    try:
+                        match = re.match(r"(\D+)(\d+)(\D+)", address, re.I)
+                        if match:
+                            items = match.groups()
+                            address = ' '.join(items).replace(' ,', ',')
+                    except UnboundLocalError:
+                        pass
+
+                    try:
+                        street_number = address.split(',')[0].strip().replace('  ', ' ')
+                        city_name = address.split(',')[2].strip().replace('  ', ' ')
+                        address_without_neigh = ', '.join([street_number, city_name]).strip().replace('  ', ' ')
+                        print(f'Search did not work with "{address}". Trying with "{address_without_neigh}"')
+                        lat,lon = geocoding_address(address=address_without_neigh)
+                        time.sleep(sleep_time_between_addresses)
+                    except IndexError:
+                        print(f'Weird address format: "{address}"')
+                        pass
+                    # If still haven't found anything
                     if pd.isnull(lat) or pd.isnull(lon):
                         print('Could not find latitude and longitude.')
+                        lat,lon = -1,-1
                     else:
                         print(f'Found latitude = {lat} and longitude = {lon}')
 
@@ -69,6 +86,8 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
                 df_city.iat[index,index_lon] = lon
                 time.sleep(sleep_time_between_addresses)
                 counter_for_saving += 1
+            else:
+                pass
 
             # This snippet saves modifications in the csv after a number of addresses. This is so longer runs that break often can restart from where they stopped last
             if counter_for_saving >= save_after:
@@ -77,7 +96,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
                 print(f'{file_name} was updated after {counter_for_saving} addresses\n')
                 counter_for_saving = 0
 
-        print(f'Finished geocoding addresses for {city}. Saving modified file.')
+        print(f'Finished geocoding addresses for {capitalize_city_name(german_characters(city))}. Saving modified file.')
         save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
 
         csvs_list.append(df_city)

@@ -5,51 +5,33 @@ import pandas as pd
 import numpy as np
 import requests
 import urllib.parse
-from geopy.extra.rate_limiter import RateLimiter
-from geopy.geocoders import Nominatim
 
-def fix_weird_address(address, weird_patterns = ['Am S Bahnhof ', 'xxx', 'xx', 'nahe', 'Nähe']):
+def fix_weird_address(address, weird_patterns = ['Am S Bahnhof', 'xxx', 'xx', 'Nahe', 'nahe', 'Nähe','nähe','Close To', 'Nearby','nearby']):
     ## Add here any other type of weird naming on addresses
     for weird in weird_patterns:
-        address = address.replace(weird, '')
+        address = address.replace(weird, '').strip().replace('  ', ' ')
 
-    return address.replace('kungerstrasse', 'kunger strasse').replace('nummer zwei', '2').replace('srasse','strasse')
-
-def geocoding_df(df, column = 'address'):
-
-
-
-    # Fixes weird addresses before Geocoding
-    df = df[column].apply(lambda row: fix_weird_address(address=row))
-
-    locator = Nominatim(user_agent='myGeocoder')
-    # 1 - convenient function to delay between geocoding calls
-    geocode = RateLimiter(locator.geocode, min_delay_seconds=1)
-    # 2- - create location column
-    df['location'] = df[column].apply(geocode)
-    # 3 - create longitude, laatitude and altitude from location column (returns tuple)
-    df['location'] = df['location'].apply(lambda loc: tuple(loc.point) if loc else None).tolist()
-    # 4 - Remove entries without detectable location
-    # df = df.dropna(subset=['location'])
-    # 5 - split point column into latitude, longitude and altitude columns
-    try:
-        df[['latitude', 'longitude', 'altitude']] = pd.DataFrame(df['location'].tolist(), index=df.index)
-    except ValueError:
-        df[['latitude', 'longitude', 'altitude']] = [np.nan,np.nan,np.nan]
-    # 6 - Remove unnecessary columns
-    return df.drop(columns=['location', 'altitude'])
+    # Correcting mispelling input from users is a never ending job....
+    return address.replace('kungerstrasse', 'kunger strasse').replace('nummer zwei', '2')\
+        .replace('srasse','strasse').replace('strs ','strasse').replace('str ','strasse').replace('Strs ','Strasse').replace('Str ','Strasse').replace('strs,','strasse,').replace('str,','strasse,').replace('Strs,','Strasse,').replace('Str,','Strasse,').replace('stasse,','strasse,').replace('Stasse,','Strasse,')\
+        .replace('Alle ', 'Allee ').replace('alle ', 'Allee ').replace('Alle,', 'Allee,').replace('alle,', 'Allee,').replace('feder','felder')\
+        .replace('Schonehauser', 'Schönhauser').replace('Warschschauer','Warschauer')\
+            .replace('Dunkerstraße','Dunckerstraße').replace('Reinstraße','Rheinstraße')\
+        .replace('Neltstraße', 'Neltestraße').replace('Camebridger', 'Cambridger')\
+        .replace('Koperniskusstraße', 'Kopernikusstraße').replace('Düsseldoffer', 'Düsseldorfer')\
+        .replace('Borndorfer','Bornsdorfer')
 
 def geocoding_address(address, sleep_time = 900):
     '''
     Function takes on address and returns latitude and longitude
     '''
     ## Coorect weird entries in address
-    address = fix_weird_address(address=address)
+    address = fix_weird_address(address=address).strip().replace('  ', ' ').replace(' ,', ',')
 
     url = 'https://nominatim.openstreetmap.org/search/' + urllib.parse.quote(address) +'?format=json'
-
     HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2919.83 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2919.83 Safari/537.36',
+        'User-Agent': 'carloshvieira2@gmail.com',
     }
 
     # Loop until request is successfull
@@ -75,7 +57,6 @@ def geocoding_address(address, sleep_time = 900):
             success = True
     try:
         return (response.json()[0]["lat"], response.json()[0]["lon"])
-
     except IndexError:
         return (np.nan,np.nan)
 
@@ -88,4 +69,4 @@ if __name__ == "__main__":
     #                          "Brachvogelstraße 8, Berlin Kreuzberg",
     #                          'Langhansstraße 21, Berlin Prenzlauer Berg']})
 
-    print(geocoding_address(address = "Südendstraße , Schöneberg, Berlin"))
+    print(fix_weird_address(address = "dsds Südendstraße54 , Schöneberg, Berlin"))

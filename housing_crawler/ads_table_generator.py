@@ -15,7 +15,7 @@ from housing_crawler.utils import save_file, get_file
 from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters, simplify_address
 
 
-def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_addresses = 1, save_after = 10):
+def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_addresses = 5, save_after = 10):
     '''
     This function iterates through all folders of each city and saves the corresponding csvs into a single csv file.
     '''
@@ -114,5 +114,53 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
         save_file(all_ads_df, 'all_encoded.csv', local_file_path='housing_crawler/data')
 
 
+def long_search(day_stop_search = None, sleep_time_between_addresses = 10, start_search_from_index = 0, save_after = 10):
+    '''
+    This method runs the encoding for ads until a defined date and saves results in .csv file.
+    '''
+    today = time.strftime(f"%d.%m.%Y", time.localtime())
+
+    ## If no stop date is given, stops by the end of current month
+    if day_stop_search is None:
+        current_month = int(time.strftime(f"%m", time.localtime()))
+        current_year = int(time.strftime(f"%Y", time.localtime()))
+        if current_month == 12:
+            next_month = 1
+            next_year = current_year + 1
+        else:
+            next_month = current_month + 1
+            next_year = current_year
+
+        if next_month <= 9:
+            day_stop_search = f'01.0{next_month}.{next_year}'
+        else:
+            day_stop_search = f'01.{next_month}.{next_year}'
+
+    print(f'Encoding will run from {today} until {day_stop_search}')
+
+    ## Loop until stop day is reached
+    while today != day_stop_search:
+        today = time.strftime(f"%d.%m.%Y", time.localtime())
+
+        # Check if between 00 and 8am, and sleep in case it is. This is because most ads are posted during the day and there's seldom need to run overnight.
+        hour_of_search = int(time.strftime(f"%H", time.localtime()))
+        while hour_of_search > 0 and hour_of_search < 8:
+            hour_of_search = int(time.strftime(f"%H", time.localtime()))
+            print(f'It is now {hour_of_search}am. Encoding sleeping between 00 and 08am.')
+            time.sleep(3600)
+
+            # Starts the search
+            cities_to_search = list(dict_city_number_wggesucht.keys())
+            print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
+            collect_cities_csvs(cities = cities_to_search[start_search_from_index:], sleep_time_between_addresses = sleep_time_between_addresses, save_after = save_after)
+
+            # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 5 min in between cities to avoid that.
+            for temp in range(10*60)[::-1]:
+                print(f'Next serch will start in {temp} seconds.', end='\r')
+                time.sleep(1)
+            print('\n\n\n')
+
+
+
 if __name__ == "__main__":
-     collect_cities_csvs()
+     long_search()

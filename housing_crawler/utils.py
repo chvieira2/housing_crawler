@@ -6,7 +6,7 @@ from config.config import ROOT_DIR
 def create_dir(path):
     # Check whether the specified path exists or not
     if os.path.exists(path):
-        print(f"The directory already exists")
+        pass
     else:
         # Create a new directory because it does not exist
         os.makedirs(path)

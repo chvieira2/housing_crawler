@@ -10,9 +10,11 @@ def remove_prefix(text, prefix):
     return text
 
 def german_characters(word):
-    return word.replace('_', ' ')\
-            .replace('ae','ä').replace('oe','ö').replace('ue','ü')\
-            .replace('ss','ß')
+    word = word.replace('_', ' ')\
+            .replace('ae','ä').replace('oe','ö').replace('ue','ü')
+    if word != 'Düsseldorf':
+        word = word.replace('ss','ß')
+    return word
 
 def standardize_characters(word, separator = '_'):
     return word.lower().replace(' ', separator)\

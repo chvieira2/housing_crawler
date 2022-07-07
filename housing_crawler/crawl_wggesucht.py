@@ -121,7 +121,7 @@ class CrawlWgGesucht(Crawler):
         # Crawling each page and adding findings to self.new_findings list
         for url in list_urls:
             if sleep_time>0:
-                # Loop until reCAPTCH is gone
+                # Loop until CAPTCH is gone
                 success = False
                 while not success:
                     new_findings = self.request_soup(url, sess=sess)
@@ -129,7 +129,7 @@ class CrawlWgGesucht(Crawler):
                         pass
                     elif len(new_findings) == 0:
                         time_now = time.mktime(time.localtime())
-                        print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for reCAPTCH to disappear....')
+                        print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for CAPTCH to disappear....')
                         time.sleep(sleep_time)
                         sleep_time += sleep_time
                     else:
@@ -138,7 +138,7 @@ class CrawlWgGesucht(Crawler):
                 new_findings = self.request_soup(url)
 
             if len(new_findings) == 0:
-                print('====== Stopped retrieving pages. Probably stuck at Recaptcha ======')
+                print('====== Stopped retrieving pages. Probably stuck at CAPTCH ======')
                 break
 
             self.existing_findings = self.existing_findings + (new_findings)
@@ -382,13 +382,13 @@ class CrawlWgGesucht(Crawler):
             else:
                 print('===== Something went wrong. No entries were found. =====')
 
-            if zero_new_ads_in_a_row >=5:
+            if zero_new_ads_in_a_row >=3:
                 break
 
         print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv =========')
 
 
-    def long_search(self, day_stop_search = None, pages_per_search = 40, start_search_from_index = 0):
+    def long_search(self, day_stop_search = None, pages_per_search = 20, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''
@@ -418,7 +418,7 @@ class CrawlWgGesucht(Crawler):
 
             # Check if between 00 and 8am, and sleep in case it is. This is because most ads are posted during the day and there's seldom need to run overnight.
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
-            while hour_of_search > 9 and hour_of_search < 8:
+            while hour_of_search > 0 and hour_of_search < 8:
                 hour_of_search = int(time.strftime(f"%H", time.localtime()))
                 print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am.')
                 time.sleep(3600)
@@ -429,6 +429,12 @@ class CrawlWgGesucht(Crawler):
                 print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
                 self.crawl_all_pages(location_name = city, number_pages = pages_per_search,
                             filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"])
+
+                # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 5 min in between cities to avoid that.
+                for temp in range(5*60)[::-1]:
+                    print(f'Next serch will start in {temp} seconds.', end='\r')
+                    time.sleep(1)
+                print('\n\n\n')
 
 
 

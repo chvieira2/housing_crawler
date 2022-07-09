@@ -34,7 +34,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
         if 'latitude' not in df_city.columns:
             df_city[['latitude', 'longitude']] = np.nan
 
-        print(f'Geocoding address in {file_name}')
+        print(f'Geocoding addresses in {file_name}')
 
         # Simplifying address again is probably not necessary but address in older searchs were not simplified so I include this code here again.
         df_city['address'] = df_city['address'].apply(lambda row: simplify_address(row) if len(row.split(',')) != 3 else row) # Simplified address most have 3 strings separated by 2 commas
@@ -76,7 +76,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
                         print(f'Weird address format: "{address}"')
                         pass
                     # If still haven't found anything
-                    if pd.isnull(lat) or pd.isnull(lon):
+                    if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
                         print('Could not find latitude and longitude.')
                         lat,lon = -1,-1
                     else:
@@ -96,14 +96,14 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
                 print(f'{file_name} was updated after {counter_for_saving} addresses\n')
                 counter_for_saving = 0
 
-        print(f'Finished geocoding addresses for {capitalize_city_name(german_characters(city))}. Saving modified file.')
+        print(f'Finished geocoding addresses for {capitalize_city_name(german_characters(city))}. There are {len(df_city)} ads in {file_name}. Saving modified file.')
         save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
 
         csvs_list.append(df_city)
 
 
     all_ads_df = pd.concat(csvs_list)
-    print('======= Csvs were collected =======')
+    print(f'======= Csvs were collected. There are {len(all_ads_df)} ads in total. =======')
 
     # Get old all_Ads
     try:
@@ -116,7 +116,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
 
 def long_search(day_stop_search = None, sleep_time_between_addresses = 10, start_search_from_index = 0, save_after = 10):
     '''
-    This method runs the encoding for ads until a defined date and saves results in .csv file.
+    This method runs the geocoding for ads until a defined date and saves results in .csv file.
     '''
     today = time.strftime(f"%d.%m.%Y", time.localtime())
 
@@ -136,7 +136,7 @@ def long_search(day_stop_search = None, sleep_time_between_addresses = 10, start
         else:
             day_stop_search = f'01.{next_month}.{next_year}'
 
-    print(f'Encoding will run from {today} until {day_stop_search}')
+    print(f'Geocoding will run from {today} until {day_stop_search}')
 
     ## Loop until stop day is reached
     while today != day_stop_search:
@@ -146,19 +146,19 @@ def long_search(day_stop_search = None, sleep_time_between_addresses = 10, start
         hour_of_search = int(time.strftime(f"%H", time.localtime()))
         while hour_of_search > 0 and hour_of_search < 8:
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
-            print(f'It is now {hour_of_search}am. Encoding sleeping between 00 and 08am.')
+            print(f'It is now {hour_of_search}am. Geocoding sleeping between 00 and 08am.')
             time.sleep(3600)
 
-            # Starts the search
-            cities_to_search = list(dict_city_number_wggesucht.keys())
-            print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
-            collect_cities_csvs(cities = cities_to_search[start_search_from_index:], sleep_time_between_addresses = sleep_time_between_addresses, save_after = save_after)
+        # Starts the search
+        cities_to_search = list(dict_city_number_wggesucht.keys())
+        print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
+        collect_cities_csvs(cities = cities_to_search[start_search_from_index:], sleep_time_between_addresses = sleep_time_between_addresses, save_after = save_after)
 
-            # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 5 min in between cities to avoid that.
-            for temp in range(10*60)[::-1]:
-                print(f'Next serch will start in {temp} seconds.', end='\r')
-                time.sleep(1)
-            print('\n\n\n')
+        # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 15 min in between cities to avoid that.
+        for temp in range(15*60)[::-1]:
+            print(f'Next serch will start in {temp} seconds.', end='\r')
+            time.sleep(1)
+        print('\n\n\n')
 
 
 

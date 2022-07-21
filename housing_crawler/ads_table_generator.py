@@ -156,7 +156,7 @@ def long_search(day_stop_search = None, sleep_time_between_addresses = 10, start
 
         # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 15 min in between cities to avoid that.
         for temp in range(15*60)[::-1]:
-            print(f'Next serch will start in {temp} seconds.', end='\r')
+            print(f'Next search will start in {temp} seconds.', end='\r')
             time.sleep(1)
         print('\n\n\n')
 

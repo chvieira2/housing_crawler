@@ -432,7 +432,7 @@ class CrawlWgGesucht(Crawler):
 
                 # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 5 min in between cities to avoid that.
                 for temp in range(5*60)[::-1]:
-                    print(f'Next serch will start in {temp} seconds.', end='\r')
+                    print(f'Next search will start in {temp} seconds.', end='\r')
                     time.sleep(1)
                 print('\n\n\n')
 

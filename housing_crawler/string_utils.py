@@ -12,7 +12,7 @@ def remove_prefix(text, prefix):
 def german_characters(word):
     word = word.replace('_', ' ')\
             .replace('ae','ä').replace('oe','ö').replace('ue','ü')
-    if word != 'Düsseldorf':
+    if word.capitalize() != 'Düsseldorf':
         word = word.replace('ss','ß')
     return word
 

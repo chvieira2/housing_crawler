@@ -388,7 +388,7 @@ class CrawlWgGesucht(Crawler):
         print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv =========')
 
 
-    def long_search(self, day_stop_search = None, pages_per_search = 20, start_search_from_index = 0):
+    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 20, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''

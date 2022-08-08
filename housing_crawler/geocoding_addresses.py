@@ -22,11 +22,11 @@ def fix_weird_address(address, weird_patterns = ['Am S Bahnhof', 'xxx', 'xx', 'N
         .replace('Koperniskusstraße', 'Kopernikusstraße').replace('Düsseldoffer', 'Düsseldorfer')\
         .replace('Borndorfer','Bornsdorfer')
 
-def geocoding_address(address, sleep_time = 900):
+def geocoding_address(address, sleep_time = 900, retry=True):
     '''
     Function takes on address and returns latitude and longitude
     '''
-    ## Coorect weird entries in address
+    ## Correct weird entries in address
     address = fix_weird_address(address=address).strip().replace('  ', ' ').replace(' ,', ',')
 
     url = 'https://nominatim.openstreetmap.org/search/' + urllib.parse.quote(address) +'?format=json'
@@ -56,10 +56,44 @@ def geocoding_address(address, sleep_time = 900):
             sleep_time += sleep_time
         else:
             success = True
+
+    # set lat and lon
     try:
-        return (response.json()[0]["lat"], response.json()[0]["lon"])
+        lat,lon = (response.json()[0]["lat"], response.json()[0]["lon"])
     except IndexError:
-        return (np.nan,np.nan)
+        lat,lon = (np.nan,np.nan)
+
+    # If retry is True (recursivity), and lat and lon are nan, then retry code with changed address
+    # Try again with shorter address
+    if retry and (pd.isnull(lat) or pd.isnull(lon)):
+        # Test if there's a mispelling of lack of space in between street and house number
+        try:
+            match = re.match(r"(\D+)(\d+)(\D+)", address, re.I)
+            if match:
+                items = match.groups()
+                address = ' '.join(items).replace(' ,', ',')
+        except UnboundLocalError:
+            pass
+
+        try:
+            street_number = address.split(',')[0].strip().replace('  ', ' ')
+            city_name = address.split(',')[2].strip().replace('  ', ' ')
+            address_without_neigh = ', '.join([street_number, city_name]).strip().replace('  ', ' ')
+            print(f'Search did not work with "{address}". Trying with "{address_without_neigh}"')
+            time.sleep(0.5)
+            lat,lon = geocoding_address(address=address_without_neigh, retry=False)
+        except IndexError:
+            print(f'Weird address format: "{address}"')
+            pass
+        # If still haven't found anything
+        if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
+            print('Could not find latitude and longitude.')
+            lat,lon = -1,-1
+        else:
+            print(f'Found latitude = {lat} and longitude = {lon}')
+
+    return lat,lon
+
 
 
 

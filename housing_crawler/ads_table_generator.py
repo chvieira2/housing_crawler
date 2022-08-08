@@ -54,34 +54,6 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
             if pd.isnull(lat) or lat == 0:
                 lat, lon = geocoding_address(address)
 
-                # Try again with shorter address
-                if pd.isnull(lat) or pd.isnull(lon):
-                    # Test if there's a mispelling of lack of space in between street and house number
-                    try:
-                        match = re.match(r"(\D+)(\d+)(\D+)", address, re.I)
-                        if match:
-                            items = match.groups()
-                            address = ' '.join(items).replace(' ,', ',')
-                    except UnboundLocalError:
-                        pass
-
-                    try:
-                        street_number = address.split(',')[0].strip().replace('  ', ' ')
-                        city_name = address.split(',')[2].strip().replace('  ', ' ')
-                        address_without_neigh = ', '.join([street_number, city_name]).strip().replace('  ', ' ')
-                        print(f'Search did not work with "{address}". Trying with "{address_without_neigh}"')
-                        time.sleep(sleep_time_between_addresses)
-                        lat,lon = geocoding_address(address=address_without_neigh)
-                    except IndexError:
-                        print(f'Weird address format: "{address}"')
-                        pass
-                    # If still haven't found anything
-                    if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
-                        print('Could not find latitude and longitude.')
-                        lat,lon = -1,-1
-                    else:
-                        print(f'Found latitude = {lat} and longitude = {lon}')
-
                 df_city.iat[index,index_lat] = lat
                 df_city.iat[index,index_lon] = lon
                 time.sleep(sleep_time_between_addresses)
@@ -114,7 +86,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, sleep_time_between_
         save_file(all_ads_df, 'all_encoded.csv', local_file_path='housing_crawler/data')
 
 
-def long_search(day_stop_search = None, sleep_time_between_addresses = 10, start_search_from_index = 0, save_after = 10):
+def long_search(day_stop_search = '01.01.2023', sleep_time_between_addresses = 10, start_search_from_index = 0, save_after = 10):
     '''
     This method runs the geocoding for ads until a defined date and saves results in .csv file.
     '''

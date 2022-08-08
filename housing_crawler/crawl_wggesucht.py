@@ -256,10 +256,11 @@ class CrawlWgGesucht(Crawler):
 
                     address = simplify_address(address)
 
-                    # Latitude and longitude
-                    # lat, lon = geocoding_address(address)
+                    ## Latitude and longitude
+                    lat, lon = geocoding_address(address)
+
                     # time.sleep(0.5)
-                    lat,lon = np.nan,np.nan
+                    # lat,lon = np.nan,np.nan
 
                     # Flatmates
                     try:

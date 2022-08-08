@@ -171,6 +171,13 @@ class CrawlWgGesucht(Crawler):
                   local_file_path=f'housing_crawler/data/{location_name}/Ads')
         return len(df)-len(old_df)
 
+    def crawl_ad_page(self, url, sess):
+        '''
+        Crawl a given page for a specific add and collects the Information about Object (Angaben zum Objekt)
+        '''
+        self.get_soup_from_url(url, sess=sess)
+
+
     def crawl_all_pages(self, location_name, number_pages,
                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
                     path_save = None):
@@ -198,8 +205,8 @@ class CrawlWgGesucht(Crawler):
 
             # Obtain older ads, or create empty table if there are no older ads
             try:
-                old_df = get_file(file_name=f'{location_name}_ads.csv',
-                                local_file_path=f'housing_crawler/data/{location_name}/Ads')
+                old_df = get_file(file_name=f'{standardize_characters(location_name)}_ads.csv',
+                                local_file_path=f'housing_crawler/data/{standardize_characters(location_name)}/Ads')
             except FileNotFoundError:
                 old_df=pd.DataFrame({'url':[]})
 
@@ -229,7 +236,9 @@ class CrawlWgGesucht(Crawler):
 
                 # Save time by not parsing old ads
                 # To check if add is old, check if the url already exist in the table
-                if ad_url in old_df['url']:
+                if ad_url in list(old_df['url']):
+                    # print('dasdasdadsasdasdasdasd')
+                    # time.sleep(50)
                     pass
                 else:
                     ## Room details and address
@@ -258,9 +267,8 @@ class CrawlWgGesucht(Crawler):
 
                     ## Latitude and longitude
                     lat, lon = geocoding_address(address)
-
-                    # time.sleep(0.5)
-                    # lat,lon = np.nan,np.nan
+                    # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
+                    time.sleep(3)
 
                     # Flatmates
                     try:
@@ -374,14 +382,18 @@ class CrawlWgGesucht(Crawler):
             if len(df)>0:
                 # Save info as df in csv format
                 ads_added = self.save_df(df=df, location_name=standardize_characters(location_name))
-                total_added_findings = total_added_findings + ads_added
-                if int(ads_added) == 0:
+            else:
+                ads_added = 0
+                print('===== No new entries were found. =====')
+
+            total_added_findings += ads_added
+
+            if int(ads_added) == 0:
                     zero_new_ads_in_a_row += 1
                     print(f'{zero_new_ads_in_a_row} pages with no new ads added in a series')
-                else:
-                    zero_new_ads_in_a_row = 0
             else:
-                print('===== Something went wrong. No entries were found. =====')
+                zero_new_ads_in_a_row = 0
+
 
             if zero_new_ads_in_a_row >=3:
                 break
@@ -432,9 +444,10 @@ class CrawlWgGesucht(Crawler):
                             filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"])
 
                 # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 5 min in between cities to avoid that.
-                for temp in range(5*60)[::-1]:
+                # for temp in range(5*60)[::-1]:
+                for temp in range(1)[::-1]:
                     print(f'Next search will start in {temp} seconds.', end='\r')
-                    time.sleep(1)
+                    time.sleep(0.1)
                 print('\n\n\n')
 
 

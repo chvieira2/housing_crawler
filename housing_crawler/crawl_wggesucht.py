@@ -56,7 +56,7 @@ class CrawlWgGesucht(Crawler):
                 '-in-'+ location_name_for_url + '.' + self.dict_city_number_wggesucht.get(location_name) +\
                     filter_code + str(page_number) + '.html'
 
-    def get_soup_from_url(self, url, sess, sleep_times = (1,2)):
+    def get_soup_from_url(self, url, sess = None, sleep_times = (1,2)):
         """
         Creates a Soup object from the HTML at the provided URL
 
@@ -64,6 +64,9 @@ class CrawlWgGesucht(Crawler):
         necessary as we need to reload the page once for all filters to
         be applied correctly on wg-gesucht.
         """
+        if sess == None:
+            print('Opening session')
+            sess = requests.session()
 
         # Sleeping for random seconds to avoid overload of requests
         sleeptime = np.random.uniform(sleep_times[0], sleep_times[1])
@@ -99,6 +102,10 @@ class CrawlWgGesucht(Crawler):
         '''
         Extract findings with requests library
         '''
+        if sess == None:
+            print('Opening session')
+            sess = requests.session()
+
         soup = self.get_soup_from_url(url, sess=sess)
         if soup is None:
             return None
@@ -110,7 +117,7 @@ class CrawlWgGesucht(Crawler):
         # Process city name to match url
         location_name = capitalize_city_name(location_name)
 
-        print(f'Processed location name. Searching for: {location_name}')
+        print(f'Processed location name. Searching for page number {page_number+1} for {location_name}')
 
         # Create list with all urls for crawling
         list_urls = [self.url_builder(location_name = location_name, page_number = page_number,
@@ -171,24 +178,348 @@ class CrawlWgGesucht(Crawler):
                   local_file_path=f'housing_crawler/data/{location_name}/Ads')
         return len(df)-len(old_df)
 
-    def crawl_ad_page(self, url, sess):
+    def crawl_ind_ad_page(self, url, sess=None):
         '''
         Crawl a given page for a specific add and collects the Information about Object (Angaben zum Objekt)
         '''
-        self.get_soup_from_url(url, sess=sess)
 
+        if sess == None:
+            print('Opening session')
+            sess = requests.session()
+
+        # Crawling page
+        # Loop until CAPTCH is gone
+        success = False
+        while not success:
+            soup = self.get_soup_from_url(url, sess=sess)
+            if soup is None:
+                print('Error during connection ======')
+                return None
+            elif len(soup) == 0:
+                time_now = time.mktime(time.localtime())
+                print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + 30*60))} to wait for CAPTCH to disappear....')
+                time.sleep(30*60)
+            else:
+                success = True
+
+        # Creates dict that will be returned at the end
+        detail_dict = {}
+
+        ## Check if page is not inactive
+        inactivation_alert = soup.find_all("div", {"class": "alert alert-with-icon alert-warning"})
+        if len(inactivation_alert) > 0:
+            detail_dict['details_searched'] = False
+            return detail_dict
+        detail_dict['details_searched'] = True
+
+
+        ## Cold rent
+        cold_rent = soup.find('table', {'class':'table'}).find('td', {'style':'padding: 3px 8px; font-size: 1.5em; vertical-align: bottom;'})
+        if cold_rent is not None:
+            cold_rent = cold_rent.text.strip().replace('€','')
+            detail_dict['cold_rent_euros'] = np.nan if cold_rent == 'n.a.' else int(cold_rent)
+
+        ## Mandatory costs
+        mandatory_costs = list(soup.find('table', {'class':'table'}).find_all('td'))
+        if len(mandatory_costs) > 0:
+            try:
+                mandatory_costs = mandatory_costs[3].text.strip().replace('€','')
+                detail_dict['mandatory_costs_euros'] = np.nan if mandatory_costs == 'n.a.' else int(mandatory_costs)
+            except IndexError:
+                detail_dict['mandatory_costs_euros'] = np.nan
+
+        ## Extra costs
+        extra_costs = list(soup.find('table', {'class':'table'}).find_all('td'))
+        if len(extra_costs) > 0:
+            try:
+                extra_costs = extra_costs[5].text.strip().replace('€','')
+                detail_dict['extra_costs_euros'] = np.nan if extra_costs == 'n.a.' else int(extra_costs)
+            except IndexError:
+                detail_dict['extra_costs_euros'] = np.nan
+
+        ## Transfer costs
+        transfer_costs = list(soup.find('table', {'class':'table'}).find_all('td'))
+        if len(transfer_costs) > 0 and 'Ablösevereinbarung' in str(transfer_costs):
+            try:
+                transfer_costs = transfer_costs[9].text.strip().replace('€','')
+                detail_dict['transfer_costs_euros'] = np.nan if transfer_costs == 'n.a.' else int(transfer_costs)
+            except IndexError:
+                detail_dict['transfer_costs_euros'] = np.nan
+
+        ## Deposit
+        kosten = soup.find('input', {'id':'kaution'})
+        if kosten is not None:
+            detail_dict['deposit'] = np.nan if kosten['value'] == 'n.a.' else int(kosten['value'])
+
+        ## ZIP code
+        address = soup.find('div', {'class':'col-sm-4 mb10'}).find('a')
+
+        if address is not None:
+            address_zip = address.text.split('\n')[4].strip()
+            foo = re.findall(r'\d+', address_zip)[0]
+            address_zip = np.nan if foo in ['', ' ', None]  else int(foo)
+            detail_dict['zip_code'] = address_zip
+
+
+
+
+        ## Look inside ad only if wg_detail exist (WGs only)
+        wg_detail = soup.find_all('ul', {'class':'ul-detailed-view-datasheet print_text_left'})
+
+        if len(wg_detail) > 0:
+            die_wg = wg_detail[0]
+            gesucht_wird = wg_detail[1]
+
+
+            ## General details
+            die_wg = [cont.text.replace('\n','').strip() for cont in die_wg.find_all('li')]
+
+            # Smoking
+            smoking = [item for item in die_wg if 'Rauch' in item]
+            if len(smoking) != 0:
+                smoking = smoking[0]
+                smoking = re.sub(' +', ' ', smoking).strip()
+                detail_dict['smoking'] = smoking
+            else:
+                detail_dict['smoking'] = np.nan
+
+            # WG type
+            wg_type = [item for item in die_wg]
+            if len(wg_type) > 4:
+                selection = wg_type[4:]
+                wg_type = [item for item in selection if 'Bewohneralte' not in item and\
+                                                    'Rauch' not in item and\
+                                                    'Sprach' not in item\
+                                                    ]
+                if len(wg_type) > 0:
+                    wg_type = wg_type[0]
+                    wg_type = re.sub(' +', ' ', wg_type).strip()
+                    detail_dict['wg_type'] = wg_type
+            else:
+                detail_dict['wg_type'] = np.nan
+
+            # Spoken languages
+            languages = [item for item in die_wg if 'Sprach' in item]
+            if len(languages) != 0:
+                languages = languages[0].split(':')[1]
+                languages = re.sub(' +', ' ', languages).strip()
+                detail_dict['languages'] = languages
+            else:
+                detail_dict['languages'] = np.nan
+
+            # Spoken languages
+            age_range = [item for item in die_wg if 'Bewohneralter:' in item]
+            if len(age_range) != 0:
+                age_range = age_range[0].split(':')[1]
+                age_range = re.sub(' +', ' ', age_range).strip()
+                detail_dict['age_range'] = age_range
+            else:
+                detail_dict['age_range'] = np.nan
+
+
+            # Looking for gender
+            try:
+                detail = gesucht_wird.find('li').text.replace('\n','')
+                detail = re.sub(' +', ' ', detail).strip()
+                detail_dict['gender_search'] = detail
+                pass
+            except AttributeError:
+                if detail_dict.get('gender_search') is None:
+                    detail_dict['gender_search'] = np.nan
+
+
+
+
+
+        ## Look for object description
+        all_info = soup.find_all('div', {'class':'col-xs-6 col-sm-4 text-center print_text_left'})
+        for object in all_info:
+            # Energy
+            try:
+                detail = object.find('div', {'id':'popover-energy-certification'}).text
+                if detail is not None:
+                    detail = object.contents[-1]
+                    detail = re.sub(' +', ' ', detail)
+                    detail_dict['energy'] = detail.strip()
+                    pass
+            except AttributeError:
+                if detail_dict.get('energy') is None:
+                    detail_dict['energy'] = np.nan
+
+            # WG possible
+            try:
+                detail = object.find('span', {'class':'mdi mdi-account-group mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['wg_possible'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('wg_possible') is None:
+                    detail_dict['wg_possible'] = np.nan
+
+            # Building type
+            try:
+                detail = object.find('span', {'class':'mdi mdi-city mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['building_type'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('building_type') is None:
+                    detail_dict['building_type'] = np.nan
+
+            # Building floor
+            try:
+                detail = object.find('span', {'class':'mdi mdi-office-building mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['building_floor'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('building_floor') is None:
+                    detail_dict['building_floor'] = np.nan
+
+            # Furniture
+            try:
+                detail = object.find('span', {'class':'mdi mdi-bed-double-outline mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['furniture'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('furniture') is None:
+                    detail_dict['furniture'] = np.nan
+
+            # Kitchen
+            try:
+                detail = object.find('span', {'class':'mdi mdi-silverware-fork-knife mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['kitchen'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('kitchen') is None:
+                    detail_dict['kitchen'] = np.nan
+
+            # Shower type
+            try:
+                detail = object.find('span', {'class':'mdi mdi-shower mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['shower_type'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('shower_type') is None:
+                    detail_dict['shower_type'] = np.nan
+
+            # TV
+            try:
+                detail = object.find('span', {'class':'mdi mdi-monitor mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['TV'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('TV') is None:
+                    detail_dict['TV'] = np.nan
+
+            # Floor type
+            try:
+                detail = object.find('span', {'class':'mdi mdi-layers mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['floor_type'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('floor_type') is None:
+                    detail_dict['floor_type'] = np.nan
+
+            # Heating
+            try:
+                detail = object.find('span', {'class':'mdi mdi-fire mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['heating'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('heating') is None:
+                    detail_dict['heating'] = np.nan
+
+            # Public transport distance
+            try:
+                detail = object.find('span', {'class':'mdi mdi-bus mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['public_transport_distance'] = detail
+                    pass
+            except AttributeError:
+
+                if detail_dict.get('public_transport_distance') is None:
+                    detail_dict['public_transport_distance'] = np.nan
+
+            # Internet
+            try:
+                detail = object.find('span', {'class':'mdi mdi-wifi mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['internet'] = detail
+                    pass
+            except AttributeError:
+
+                if detail_dict.get('internet') is None:
+                    detail_dict['internet'] = np.nan
+
+            # Parking
+            try:
+                detail = object.find('span', {'class':'mdi mdi-car mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['parking'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('parking') is None:
+                    detail_dict['parking'] = np.nan
+
+            # Extras
+            try:
+                detail = object.find('span', {'class':'mdi mdi-folder mdi-36px noprint'}).text
+                if detail is not None:
+                    detail = object.text.replace('\n','')
+                    detail = re.sub(' +', ' ', detail).strip()
+                    detail_dict['extras'] = detail
+                    pass
+            except AttributeError:
+                if detail_dict.get('extras') is None:
+                    detail_dict['extras'] = np.nan
+
+
+        print(detail_dict)
 
     def crawl_all_pages(self, location_name, number_pages,
                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
-                    path_save = None):
+                    path_save = None, sess=None):
         '''
         Main crawling function. Function will first connect to all pages and save findings (ads) using the parse_url method. Next, it obtain older ads table to which newer ads will be added.
         '''
         if path_save is None:
             path_save = f'housing_crawler/data/{standardize_characters(location_name)}/Ads'
 
-        print('Opening session')
-        sess = requests.session()
+        if sess == None:
+            print('Opening session')
+            sess = requests.session()
+
         # First page load to set filters; response is discarded
         print('Making first call to set filters')
         url_set_filters = self.url_builder(location_name = location_name, page_number = 1,
@@ -203,7 +534,7 @@ class CrawlWgGesucht(Crawler):
                         filters = filters, sess=sess)
 
 
-            # Obtain older ads, or create empty table if there are no older ads
+            # Obtain older ads, or create empty table if there are no older ads. Needs to run inside the page_number loop so it's constantly updated with previous ads
             try:
                 old_df = get_file(file_name=f'{standardize_characters(location_name)}_ads.csv',
                                 local_file_path=f'housing_crawler/data/{standardize_characters(location_name)}/Ads')
@@ -400,11 +731,14 @@ class CrawlWgGesucht(Crawler):
 
         print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv =========')
 
-
-    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 20, start_search_from_index = 0):
+    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 25, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''
+
+        print('Opening session')
+        sess = requests.session()
+
         today = time.strftime(f"%d.%m.%Y", time.localtime())
 
         ## If no stop date is given, stops by the end of current month
@@ -441,14 +775,14 @@ class CrawlWgGesucht(Crawler):
             for city in cities_to_search[start_search_from_index:]:
                 print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
                 self.crawl_all_pages(location_name = city, number_pages = pages_per_search,
-                            filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"])
+                            filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
+                            sess = sess)
 
-                # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 5 min in between cities to avoid that.
-                # for temp in range(5*60)[::-1]:
-                for temp in range(1)[::-1]:
-                    print(f'Next search will start in {temp} seconds.', end='\r')
-                    time.sleep(0.1)
-                print('\n\n\n')
+            # Constantly searching is detected by the page and goes into CAPTCH. Sleep for 5 min in between cities to avoid that.
+            for temp in range(5*60)[::-1]:
+                print(f'Next search will start in {temp} seconds.', end='\r')
+                time.sleep(1)
+            print('\n\n\n')
 
 
 
@@ -460,3 +794,16 @@ if __name__ == "__main__":
     #                         local_file_path=f'housing_crawler/data/berlin/Ads')
 
     # CrawlWgGesucht().save_df(df, 'berlin')
+
+    # CrawlWgGesucht().crawl_ind_ad_page(url = 'https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Sud.9397478.html')
+
+
+# https://www.wg-gesucht.de/wohnungen-in-Berlin-Prenzlauer-Berg.8740207.html
+# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Degerloch.9468004.html
+# https://www.wg-gesucht.de/wohnungen-in-Stuttgart-Sud.9522935.html
+# https://www.wg-gesucht.de/1-zimmer-wohnungen-in-Stuttgart-Ost.9518976.html
+# https://www.wg-gesucht.de/wohnungen-in-Stuttgart-Ost.9523598.html
+# https://www.wg-gesucht.de/wohnungen-in-Stuttgart-Feuerbach.9522133.html
+# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Moehringen.9519926.html
+# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Sud.9397664.html
+# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Sud.9397478.html

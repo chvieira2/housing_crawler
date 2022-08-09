@@ -74,13 +74,13 @@ class CrawlWgGesucht(Crawler):
         time.sleep(sleeptime)
 
         # Setup an agent
-        print('Rotating agent')
+        # print('Rotating agent')
         self.rotate_user_agent()
 
         # Second page load
-        print(f"Connecting to page...")
+        # print(f"Connecting to page...")
         resp = sess.get(url, headers=self.HEADERS)
-        print(f"Got response code {resp.status_code}")
+        # print(f"Got response code {resp.status_code}")
 
         # Return soup object
         if resp.status_code != 200:
@@ -133,7 +133,7 @@ class CrawlWgGesucht(Crawler):
                 while not success:
                     new_findings = self.request_soup(url, sess=sess)
                     if new_findings is None:
-                        pass
+                        continue
                     elif len(new_findings) == 0:
                         time_now = time.mktime(time.localtime())
                         print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for CAPTCH to disappear....')
@@ -155,7 +155,7 @@ class CrawlWgGesucht(Crawler):
         try:
             old_df = get_file(file_name=f'{location_name}_ads.csv',
                             local_file_path=f'housing_crawler/data/{location_name}/Ads')
-            print('Obtained older ads')
+            # print('Obtained older ads')
         except:
             old_df = pd.DataFrame(columns = df.columns)
             print('No older ads found')
@@ -167,6 +167,9 @@ class CrawlWgGesucht(Crawler):
         for new_column in old_df.columns:
             if new_column not in df.columns:
                 df[new_column] = np.nan
+        for new_column in df.columns:
+            if new_column not in old_df.columns:
+                old_df[new_column] = np.nan
 
         # Add new ads to older list and discard copies. Keep = first is important because wg-gesucht keeps on refreshing the post date of some ads (private paid ads?). With keep = first I keep the first entry
         df = pd.concat([df,old_df]).drop_duplicates(subset='id', keep="last").reset_index(drop=True)
@@ -195,12 +198,14 @@ class CrawlWgGesucht(Crawler):
             if soup is None:
                 print('Error during connection ======')
                 return None
-            elif len(soup) == 0:
-                time_now = time.mktime(time.localtime())
-                print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + 30*60))} to wait for CAPTCH to disappear....')
-                time.sleep(30*60)
             else:
-                success = True
+                try:
+                    soup.find('table', {'class':'table'}).find('td', {'style':'padding: 3px 8px; font-size: 1.5em; vertical-align: bottom;'})
+                    success = True
+                except AttributeError:
+                    time_now = time.mktime(time.localtime())
+                    print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + 30*60))} to wait for CAPTCH to disappear....')
+                    time.sleep(30*60)
 
         # Creates dict that will be returned at the end
         detail_dict = {}
@@ -255,10 +260,13 @@ class CrawlWgGesucht(Crawler):
         address = soup.find('div', {'class':'col-sm-4 mb10'}).find('a')
 
         if address is not None:
-            address_zip = address.text.split('\n')[4].strip()
-            foo = re.findall(r'\d+', address_zip)[0]
-            address_zip = np.nan if foo in ['', ' ', None]  else int(foo)
-            detail_dict['zip_code'] = address_zip
+            try:
+                address_zip = address.text.split('\n')[4].strip()
+                foo = re.findall(r'\d+', address_zip)[0]
+                address_zip = np.nan if foo in ['', ' ', None]  else int(foo)
+                detail_dict['zip_code'] = address_zip
+            except IndexError:
+                detail_dict['zip_code'] = np.nan
 
 
 
@@ -307,7 +315,7 @@ class CrawlWgGesucht(Crawler):
             else:
                 detail_dict['languages'] = np.nan
 
-            # Spoken languages
+            # Age range
             age_range = [item for item in die_wg if 'Bewohneralter:' in item]
             if len(age_range) != 0:
                 age_range = age_range[0].split(':')[1]
@@ -316,8 +324,7 @@ class CrawlWgGesucht(Crawler):
             else:
                 detail_dict['age_range'] = np.nan
 
-
-            # Looking for gender
+            # Gender searched
             try:
                 detail = gesucht_wird.find('li').text.replace('\n','')
                 detail = re.sub(' +', ' ', detail).strip()
@@ -329,16 +336,14 @@ class CrawlWgGesucht(Crawler):
 
 
 
-
-
         ## Look for object description
-        all_info = soup.find_all('div', {'class':'col-xs-6 col-sm-4 text-center print_text_left'})
-        for object in all_info:
+        object_info = soup.find_all('div', {'class':'col-xs-6 col-sm-4 text-center print_text_left'})
+        for object in object_info:
             # Energy
             try:
                 detail = object.find('div', {'id':'popover-energy-certification'}).text
                 if detail is not None:
-                    detail = object.contents[-1]
+                    detail = object.contents[-1].replace('\n',' ').replace('m&sup2a', 'm²a')
                     detail = re.sub(' +', ' ', detail)
                     detail_dict['energy'] = detail.strip()
                     pass
@@ -504,8 +509,7 @@ class CrawlWgGesucht(Crawler):
                 if detail_dict.get('extras') is None:
                     detail_dict['extras'] = np.nan
 
-
-        print(detail_dict)
+        return detail_dict
 
     def crawl_all_pages(self, location_name, number_pages,
                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
@@ -543,21 +547,13 @@ class CrawlWgGesucht(Crawler):
 
 
             # Extracting info of interest from pages
-            print(f"Crawling {len(self.existing_findings)} ads")
+            # print(f"Crawling {len(self.existing_findings)} ads")
             entries = []
             total_findings = len(self.existing_findings)
             for index in range(total_findings):
                 # Print count down
-                print(f'=====> Geocoded {index+1}/{total_findings}', end='\r')
+                print(f'=====> Parsed {index+1}/{total_findings}', end='\r')
                 row = self.existing_findings[index]
-
-                ### Commercial offers from companies, often with several rooms in same building
-                try:
-                    test_text = row.find("div", {"class": "col-xs-9"})\
-                .find("span", {"class": "label_verified ml5"}).text
-                    landlord_type = test_text.replace(' ','').replace('"','').replace('\n','').replace('\t','').replace(';','')
-                except AttributeError:
-                    landlord_type = 'Private'
 
                 # Ad title and url
                 title_row = row.find('h3', {"class": "truncate_title"})
@@ -565,13 +561,28 @@ class CrawlWgGesucht(Crawler):
                     .replace(';','')
                 ad_url = self.base_url + remove_prefix(title_row.find('a')['href'], "/")
 
+                ad_id = ad_url.split('.')[-2]
+
+
                 # Save time by not parsing old ads
                 # To check if add is old, check if the url already exist in the table
-                if ad_url in list(old_df['url']):
-                    # print('dasdasdadsasdasdasdasd')
-                    # time.sleep(50)
-                    pass
+                # Some ads that have already been collected persist on being parsed and I don't know why. This slows down the code and increases risk of being caught by CAPTH  because these are searched without need
+                if (ad_url in list(old_df['url'])) or ('asset_id' in ad_url) or (ad_id in list(old_df['id'])):
+                    continue
                 else:
+                    ## Get ad specific details
+                    ad_details = self.crawl_ind_ad_page(url=ad_url,sess=sess)
+                    # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
+                    time.sleep(5)
+
+                    # Commercial offers from companies, often with several rooms in same building
+                    try:
+                        test_text = row.find("div", {"class": "col-xs-9"})\
+                    .find("span", {"class": "label_verified ml5"}).text
+                        landlord_type = test_text.replace(' ','').replace('"','').replace('\n','').replace('\t','').replace(';','')
+                    except AttributeError:
+                        landlord_type = 'Private'
+
                     ## Room details and address
                     detail_string = row.find("div", {"class": "col-xs-11"}).text.strip().split("|")
                     details_array = list(map(lambda s: re.sub(' +', ' ',
@@ -590,11 +601,19 @@ class CrawlWgGesucht(Crawler):
                     else:
                         rooms = rooms_tmp if rooms_tmp>0 else 0
 
-                    # Address
+                    ## Address
                     address = details_array[2].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')\
                         + ', ' + details_array[1].replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')
 
                     address = simplify_address(address)
+                    address = re.sub(' +', ' ', address) # Remove multiple spaces
+
+                    # Add the zip code info in place of neighbourhood name
+                    if isinstance(ad_details['zip_code'], int):
+                        address = address.split(', ')
+                        address[1] = str(ad_details['zip_code'])
+                        address = ', '.join(address)
+
 
                     ## Latitude and longitude
                     lat, lon = geocoding_address(address)
@@ -674,7 +693,7 @@ class CrawlWgGesucht(Crawler):
 
                     ### Create dataframe with info
                     details = {
-                        'id': int(ad_url.split('.')[-2]),
+                        'id': int(ad_id),
                         'url': str(ad_url),
                         'type_offer': str(type_offer),
                         'landlord_type': str(landlord_type),
@@ -701,6 +720,9 @@ class CrawlWgGesucht(Crawler):
                     elif len(availability_dates) == 1:
                         details['available from'] = str(availability_dates[0])
                         details['available to'] = np.nan
+
+                    ## Add ad details to the dictionary
+                    details.update(ad_details)
 
                     entries.append(details)
 
@@ -787,23 +809,12 @@ class CrawlWgGesucht(Crawler):
 
 
 if __name__ == "__main__":
-    CrawlWgGesucht().long_search()
-    # CrawlWgGesucht().crawl_all_pages('Stuttgart', 100)
+    # CrawlWgGesucht().long_search()
+    # CrawlWgGesucht().crawl_all_pages('Berlin', 1)
 
     # df = get_file(file_name=f'berlin_ads.csv',
     #                         local_file_path=f'housing_crawler/data/berlin/Ads')
 
     # CrawlWgGesucht().save_df(df, 'berlin')
 
-    # CrawlWgGesucht().crawl_ind_ad_page(url = 'https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Sud.9397478.html')
-
-
-# https://www.wg-gesucht.de/wohnungen-in-Berlin-Prenzlauer-Berg.8740207.html
-# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Degerloch.9468004.html
-# https://www.wg-gesucht.de/wohnungen-in-Stuttgart-Sud.9522935.html
-# https://www.wg-gesucht.de/1-zimmer-wohnungen-in-Stuttgart-Ost.9518976.html
-# https://www.wg-gesucht.de/wohnungen-in-Stuttgart-Ost.9523598.html
-# https://www.wg-gesucht.de/wohnungen-in-Stuttgart-Feuerbach.9522133.html
-# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Moehringen.9519926.html
-# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Sud.9397664.html
-# https://www.wg-gesucht.de/wg-zimmer-in-Stuttgart-Sud.9397478.html
+    print(CrawlWgGesucht().crawl_ind_ad_page(url = 'https://www.wg-gesucht.de/wg-zimmer-in-Munchen-Maxvorstadt.9206016.html'))

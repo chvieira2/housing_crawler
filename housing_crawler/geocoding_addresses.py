@@ -1,4 +1,5 @@
 
+from audioop import add
 import re
 import time
 import pandas as pd
@@ -68,23 +69,42 @@ def geocoding_address(address, sleep_time = 900, retry=True):
     if retry and (pd.isnull(lat) or pd.isnull(lon)):
         # Test if there's a mispelling of lack of space in between street and house number
         try:
-            match = re.match(r"(\D+)(\d+)(\D+)", address, re.I)
+            address_streetnumber = address.split(',')[0]
+            address_other = ','.join(address.split(',')[1:])
+            match = re.match(r"(\D+)(\d+)", address_streetnumber, re.I)
             if match:
                 items = match.groups()
-                address = ' '.join(items).replace(' ,', ',')
+                address_streetnumber = ' '.join(items).replace(' ,', ',')
+                address = ','.join([address_streetnumber,address_other])
         except UnboundLocalError:
             pass
 
+        # Retry without zip code
         try:
             street_number = address.split(',')[0].strip().replace('  ', ' ')
             city_name = address.split(',')[2].strip().replace('  ', ' ')
             address_without_neigh = ', '.join([street_number, city_name]).strip().replace('  ', ' ')
             print(f'Search did not work with "{address}". Trying with "{address_without_neigh}"')
-            time.sleep(5) # Sleep before trying again to avoid getting stuck
+            time.sleep(3) # Sleep before trying again to avoid getting stuck
             lat,lon = geocoding_address(address=address_without_neigh, retry=False)
         except IndexError:
             print(f'Weird address format: "{address}"')
             pass
+
+        # If still haven't found anything
+        if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
+            # Retry without street
+            try:
+                zip_code = address.split(',')[1].strip().replace('  ', ' ')
+                city_name = address.split(',')[2].strip().replace('  ', ' ')
+                address_without_street = ', '.join([zip_code, city_name]).strip().replace('  ', ' ')
+                print(f'Search did not work with "{address_without_neigh}". Trying with "{address_without_street}"')
+                time.sleep(3) # Sleep before trying again to avoid getting stuck
+                lat,lon = geocoding_address(address=address_without_street, retry=False)
+            except IndexError:
+                print(f'Weird address format: "{address}"')
+                pass
+
         # If still haven't found anything
         if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
             print('Could not find latitude and longitude.')
@@ -104,4 +124,4 @@ if __name__ == "__main__":
     #                          "Brachvogelstraße 8, Berlin Kreuzberg",
     #                          'Langhansstraße 21, Berlin Prenzlauer Berg']})
 
-    print(fix_weird_address(address = "dsds Südendstraße54 , Schöneberg, Berlin"))
+    print(geocoding_address('Nazarekirchstrasse51, 13347, Berlin', sleep_time = 1, retry=True))

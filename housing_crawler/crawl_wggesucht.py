@@ -150,15 +150,17 @@ class CrawlWgGesucht(Crawler):
 
             self.existing_findings = self.existing_findings + (new_findings)
 
-    def save_df(self, df, location_name):
+    def save_df(self, df, location_name, old_df = None):
         ## First obtain older ads for updating table
-        try:
-            old_df = get_file(file_name=f'{location_name}_ads.csv',
-                            local_file_path=f'housing_crawler/data/{location_name}/Ads')
-            # print('Obtained older ads')
-        except:
-            old_df = pd.DataFrame(columns = df.columns)
-            print('No older ads found')
+
+        if old_df == None:
+            try:
+                old_df = get_file(file_name=f'{location_name}_ads.csv',
+                                local_file_path=f'housing_crawler/data/{location_name}/Ads')
+                # print('Obtained older ads')
+            except:
+                old_df = pd.DataFrame(columns = df.columns)
+                print('No older ads found. Creating brand new csv.')
 
         # Exclude weird ads without an id number
         df = df[df['id'] != 0]
@@ -183,7 +185,7 @@ class CrawlWgGesucht(Crawler):
 
     def crawl_all_pages(self, location_name, number_pages,
                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
-                    path_save = None, sess=None):
+                    path_save = None, sess=None, save_after = 3):
         '''
         Main crawling function. Function will first connect to all pages and save findings (ads) using the parse_url method. Next, it obtain older ads table to which newer ads will be added.
         '''
@@ -212,6 +214,7 @@ class CrawlWgGesucht(Crawler):
             try:
                 old_df = get_file(file_name=f'{standardize_characters(location_name)}_ads.csv',
                                 local_file_path=f'housing_crawler/data/{standardize_characters(location_name)}/Ads')
+                print(f'Loaded previous {standardize_characters(location_name)}_ads.csv with {len(old_df)} ads in total')
             except FileNotFoundError:
                 old_df=pd.DataFrame({'url':[]})
 
@@ -227,8 +230,7 @@ class CrawlWgGesucht(Crawler):
 
                 # Ad title and url
                 title_row = row.find('h3', {"class": "truncate_title"})
-                title = title_row.text.strip().replace('"','').replace('\n',' ').replace('\t',' ')\
-                    .replace(';','')
+                title = title_row.text.strip().replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')
                 ad_url = self.base_url + remove_prefix(title_row.find('a')['href'], "/")
 
                 ad_id = ad_url.split('.')[-2]
@@ -238,14 +240,14 @@ class CrawlWgGesucht(Crawler):
                 # To check if add is old, check if the url already exist in the table
                 # Some ads that have already been collected persist on being parsed and I don't know why. This slows down the code and increases risk of being caught by CAPTH  because these are searched without need
                 if (ad_url in list(old_df['url'])) or ('asset_id' in ad_url) or (ad_id in list(old_df['id'])):
-                    continue
+                    pass
                 else:
-                    ## Get ad specific details
-                    ad_details = crawl_ind_ad_page(url=ad_url,sess=sess)
                     # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
-                    for temp in range(8)[::-1]:
+                    for temp in range(10)[::-1]:
                         print(f'Waiting {temp} seconds before continuing.', end='\r')
                         time.sleep(1)
+                    ## Get ad specific details
+                    ad_details = crawl_ind_ad_page(url=ad_url,sess=sess)
 
                     # Commercial offers from companies, often with several rooms in same building
                     try:
@@ -293,10 +295,6 @@ class CrawlWgGesucht(Crawler):
 
                     ## Latitude and longitude
                     lat, lon = geocoding_address(address)
-                    # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
-                    for temp in range(3)[::-1]:
-                        print(f'Waiting {temp} seconds before continuing.', end='\r')
-                        time.sleep(1)
 
                     # Flatmates
                     try:
@@ -404,8 +402,10 @@ class CrawlWgGesucht(Crawler):
 
                     entries.append(details)
 
+
             # Reset existing_findings
             self.existing_findings = []
+            n_ads_to_add = 0
 
             # Create the dataframe
             df = pd.DataFrame(entries)
@@ -420,8 +420,8 @@ class CrawlWgGesucht(Crawler):
             total_added_findings += n_ads_added
 
             if int(n_ads_added) == 0:
-                    zero_new_ads_in_a_row += 1
-                    print(f'{zero_new_ads_in_a_row} pages with no new ads added in a series')
+                zero_new_ads_in_a_row += 1
+                print(f'{zero_new_ads_in_a_row} pages with no new ads added in a series')
             else:
                 zero_new_ads_in_a_row = 0
 
@@ -431,7 +431,7 @@ class CrawlWgGesucht(Crawler):
 
         print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv. There are now {len(df)} ads in total. =========')
 
-    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 25, start_search_from_index = 0):
+    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 40, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''
@@ -465,7 +465,7 @@ class CrawlWgGesucht(Crawler):
 
             # Check if between 00 and 8am, and sleep in case it is. This is because most ads are posted during the day and there's seldom need to run overnight.
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
-            while hour_of_search > 0 and hour_of_search < 8:
+            while hour_of_search > 8 and hour_of_search < 8:
                 hour_of_search = int(time.strftime(f"%H", time.localtime()))
                 for temp in range(60*60)[::-1]:
                     print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am. Waiting {temp} seconds before continuing.', end='\r')

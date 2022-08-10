@@ -4,50 +4,83 @@ The goal of this module is to collect all ads from all cities into a unified csv
 '''
 
 import pandas as pd
+pd.options.mode.chained_assignment = None  # default='warn'. Needed to remove SettingWithCopyWarning warning when assigning new value to dataframe column
 import numpy as np
 import time
 import re
+import requests
 
 
 from housing_crawler.geocoding_addresses import geocoding_address, fix_weird_address
-# from housing_crawler.crawl_wggesucht import crawl_ind_ad_page
 from housing_crawler.params import dict_city_number_wggesucht
-from housing_crawler.utils import save_file, get_file
+from housing_crawler.utils import save_file, get_file, crawl_ind_ad_page
 from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters, simplify_address
 
-def geocode_addresses(df_city, file_name, city,
-                      sleep_time_between_addresses = 3, save_after = 10):
+def fix_older_table(df_city, file_name, city,
+                      sess = None,
+                      sleep_time_between_addresses = 3, save_after = 3):
     '''
-    Geocoding is necessary because older searches did not include it. For newer searches this is redundant.
+
     '''
-    # Creates latitude and longitude columns if they don't exist
-    if 'latitude' not in df_city.columns:
-        df_city[['latitude', 'longitude']] = np.nan
 
-    # Simplifying address again is probably not necessary but address in older searchs were not simplified so I include this code here again.
-    df_city['address'] = df_city['address'].apply(lambda row: simplify_address(row) if len(row.split(',')) != 3 else row) # Simplified address most have 3 strings separated by 2 commas
+    if sess == None:
+        print('Opening session')
+        sess = requests.session()
 
-    total_addresses_city = len(df_city)
+
+    total_rows_city = len(df_city)
     counter_for_saving = 0
-    for index in range(total_addresses_city):
-        # Print count down
-        print(f'=====> Geocoded {index+1}/{total_addresses_city}', end='\r')
+    ## Loop over each row in the df
+    for index_row in range(total_rows_city):
+
+        ### Adding ad specific info
+        details_searched = df_city['details_searched'].iloc[index_row]
+        # Check if needed
+        if str(details_searched) == 'True' or str(details_searched) == 'False' or str(details_searched) == '1.0':
+            pass
+        else:
+            ad_url = df_city['url'].iloc[index_row]
+            print(f'Collecting info for ad {df_city["id"].iloc[index_row]}', end='\n')
+            ads_dict = crawl_ind_ad_page(url=ad_url, sess=sess)
+
+            if len(list(ads_dict.keys())) == 0:
+                df_city['details_searched'].iloc[index_row] = False
+                pass
+            ## Add ad values to main dataframe
+            for key, value in ads_dict.items():
+                df_city[key].iloc[index_row] = value
+            counter_for_saving += 1
 
 
-        address = df_city['address'].iloc[index]
+            for temp in range(20)[::-1]:
+                print(f'Waiting {temp} seconds before continuing.', end='\r')
+                time.sleep(1)
+
+
+        ### Geocoding
+        ## Geocoding is necessary because older searches did not include it. For newer searches this is redundant.
+
+        # Simplifying address again is probably not necessary but address in older searchs were not simplified so I include this code here again.
+        df_city['address'] = df_city['address'].apply(lambda row: simplify_address(row) if len(row.split(',')) != 3 else row) # Simplified address most have 3 strings separated by 2 commas
+
+
+
+        address = df_city['address'].iloc[index_row]
         address = fix_weird_address(address).strip().replace('  ', ' ').replace(' ,', ',')
-        lat = df_city['latitude'].iloc[index]
+        lat = df_city['latitude'].iloc[index_row]
         index_lat = list(df_city.columns).index('latitude')
         index_lon = list(df_city.columns).index('longitude')
-        if pd.isnull(lat) or lat == -1:
+        if pd.isnull(lat) or lat == np.nan or lat == -1:
+            print(f'Geocoding {address}...')
             lat, lon = geocoding_address(address)
 
-            df_city.iat[index,index_lat] = lat
-            df_city.iat[index,index_lon] = lon
-            time.sleep(sleep_time_between_addresses)
+            df_city.iat[index_row,index_lat] = lat
+            df_city.iat[index_row,index_lon] = lon
+            for temp in range(sleep_time_between_addresses)[::-1]:
+                print(f'Waiting {temp} seconds before continuing.', end='\r')
+                time.sleep(1)
+
             counter_for_saving += 1
-        else:
-            pass
 
         # This snippet saves modifications in the csv after a number of addresses. This is so longer runs that break often can restart from where they stopped last
         if counter_for_saving >= save_after:
@@ -58,6 +91,7 @@ def geocode_addresses(df_city, file_name, city,
 
     print(f'Finished geocoding addresses for {capitalize_city_name(german_characters(city))}. There are {len(df_city)} ads in {file_name}.')
     return df_city
+
 
 def collect_cities_csvs(cities = dict_city_number_wggesucht):
     '''
@@ -74,7 +108,8 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht):
             print(f'{file_name} was not found')
             pass
 
-        df_city = geocode_addresses(df_city, city=city, file_name=file_name)
+        # Update older searches with newer feautures, like geocoding of addresses or collecting ad specific info
+        df_city = fix_older_table(df_city, city=city, file_name=file_name)
 
 
         save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
@@ -93,8 +128,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht):
     except:
         save_file(all_ads_df, 'all_encoded.csv', local_file_path='housing_crawler/data')
 
-
-def long_search(day_stop_search = '01.01.2023', sleep_time_between_addresses = 10, start_search_from_index = 0, save_after = 10):
+def long_search(day_stop_search = '01.01.2023', start_search_from_index = 0):
     '''
     This method runs the geocoding for ads until a defined date and saves results in .csv file.
     '''
@@ -124,9 +158,9 @@ def long_search(day_stop_search = '01.01.2023', sleep_time_between_addresses = 1
 
         # Check if between 00 and 8am, and sleep in case it is. This is because most ads are posted during the day and there's seldom need to run overnight.
         hour_of_search = int(time.strftime(f"%H", time.localtime()))
-        while hour_of_search > 0 and hour_of_search < 8:
+        while hour_of_search > 8 and hour_of_search < 8:
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
-            print(f'It is now {hour_of_search}am. Geocoding sleeping between 00 and 08am.')
+            print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am.')
             time.sleep(3600)
 
         # Starts the search

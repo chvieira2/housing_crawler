@@ -184,7 +184,7 @@ class CrawlWgGesucht(Crawler):
 
     def crawl_all_pages(self, location_name, number_pages,
                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
-                    path_save = None, sess=None, save_after = 3):
+                    path_save = None, sess=None):
         '''
         Main crawling function. Function will first connect to all pages and save findings (ads) using the parse_url method. Next, it obtain older ads table to which newer ads will be added.
         '''
@@ -241,7 +241,6 @@ class CrawlWgGesucht(Crawler):
 
                 # Save time by not parsing old ads
                 # To check if add is old, check if the url already exist in the table
-                # Some ads that have already been collected persist on being parsed and I don't know why. This slows down the code and increases risk of being caught by CAPTH  because these are searched without need
                 if ad_id == '':
                     pass
                 elif (ad_url in list(old_df['url'])) or ('asset_id' in ad_url) or (ad_id in list(old_df['id']) or (int(ad_id) in list(old_df['id']))):
@@ -430,7 +429,7 @@ class CrawlWgGesucht(Crawler):
                 zero_new_ads_in_a_row = 0
 
 
-            if zero_new_ads_in_a_row >=100:
+            if zero_new_ads_in_a_row >=5:
                 break
 
         print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv. There are now {len(old_df)} ads in total. =========')

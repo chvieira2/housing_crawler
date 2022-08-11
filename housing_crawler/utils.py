@@ -103,7 +103,7 @@ def crawl_ind_ad_page(url, sess=None):
                 success = True
             except AttributeError:
                 time_now = time.mktime(time.localtime())
-                print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + 30*60))} to wait for CAPTCH to disappear....')
+                print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + 32*60))} to wait for CAPTCH to disappear....')
                 time.sleep(30*60)
 
     ## Check if page is not inactive

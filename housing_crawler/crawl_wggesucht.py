@@ -56,7 +56,7 @@ class CrawlWgGesucht(Crawler):
                 '-in-'+ location_name_for_url + '.' + self.dict_city_number_wggesucht.get(location_name) +\
                     filter_code + str(page_number) + '.html'
 
-    def get_soup_from_url(self, url, sess = None, sleep_times = (1,2)):
+    def get_soup_from_url(self, url, sess = None, sleep_times = (2,3)):
         """
         Creates a Soup object from the HTML at the provided URL
 
@@ -111,7 +111,7 @@ class CrawlWgGesucht(Crawler):
             return None
         return self.extract_data(soup)
 
-    def parse_urls(self, location_name, page_number, filters, sess, sleep_time = 30*60):
+    def parse_urls(self, location_name, page_number, filters, sess, sleep_time = 32*60):
         """Parse through all exposes in self.existing_findings to return a formated dataframe.
         """
         # Process city name to match url
@@ -138,7 +138,6 @@ class CrawlWgGesucht(Crawler):
                         time_now = time.mktime(time.localtime())
                         print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for CAPTCH to disappear....')
                         time.sleep(sleep_time)
-                        # sleep_time += sleep_time
                     else:
                         success = True
             else:
@@ -205,6 +204,10 @@ class CrawlWgGesucht(Crawler):
         zero_new_ads_in_a_row = 0
         total_added_findings = 0
         for page_number in range(number_pages):
+            # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
+            for temp in range(1)[::-1]:
+                print(f'Waiting {temp} seconds before continuing.', end='\r')
+                time.sleep(1)
             # Obtaining pages
             self.parse_urls(location_name = location_name, page_number= page_number,
                         filters = filters, sess=sess)
@@ -233,17 +236,19 @@ class CrawlWgGesucht(Crawler):
                 title = title_row.text.strip().replace('"','').replace('\n',' ').replace('\t',' ').replace(';','')
                 ad_url = self.base_url + remove_prefix(title_row.find('a')['href'], "/")
 
-                ad_id = ad_url.split('.')[-2]
+                ad_id = ad_url.split('.')[-2].strip()
 
 
                 # Save time by not parsing old ads
                 # To check if add is old, check if the url already exist in the table
                 # Some ads that have already been collected persist on being parsed and I don't know why. This slows down the code and increases risk of being caught by CAPTH  because these are searched without need
-                if (ad_url in list(old_df['url'])) or ('asset_id' in ad_url) or (ad_id in list(old_df['id'])):
+                if ad_id == '':
+                    pass
+                elif (ad_url in list(old_df['url'])) or ('asset_id' in ad_url) or (ad_id in list(old_df['id']) or (int(ad_id) in list(old_df['id']))):
                     pass
                 else:
                     # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
-                    for temp in range(10)[::-1]:
+                    for temp in range(2)[::-1]:
                         print(f'Waiting {temp} seconds before continuing.', end='\r')
                         time.sleep(1)
                     ## Get ad specific details
@@ -405,7 +410,6 @@ class CrawlWgGesucht(Crawler):
 
             # Reset existing_findings
             self.existing_findings = []
-            n_ads_to_add = 0
 
             # Create the dataframe
             df = pd.DataFrame(entries)
@@ -429,9 +433,9 @@ class CrawlWgGesucht(Crawler):
             if zero_new_ads_in_a_row >=100:
                 break
 
-        print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv. There are now {len(df)} ads in total. =========')
+        print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv. There are now {len(old_df)} ads in total. =========')
 
-    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 40, start_search_from_index = 0):
+    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 50, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''
@@ -472,7 +476,7 @@ class CrawlWgGesucht(Crawler):
                     time.sleep(1)
 
             # Starts the search
-            cities_to_search = list(dict_city_number_wggesucht.keys())
+            cities_to_search = list(dict_city_number_wggesucht.keys())#[::-1]
             for city in cities_to_search[start_search_from_index:]:
                 print(f'Starting search at {time.strftime(f"%d.%m.%Y %H:%M:%S", time.localtime())}')
                 self.crawl_all_pages(location_name = city, number_pages = pages_per_search,

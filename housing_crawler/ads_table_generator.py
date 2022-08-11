@@ -52,7 +52,7 @@ def fix_older_table(df_city, file_name, city,
             counter_for_saving += 1
 
 
-            for temp in range(20)[::-1]:
+            for temp in range(1)[::-1]:
                 print(f'Waiting {temp} seconds before continuing.', end='\r')
                 time.sleep(1)
 
@@ -72,13 +72,13 @@ def fix_older_table(df_city, file_name, city,
         index_lon = list(df_city.columns).index('longitude')
         if pd.isnull(lat) or lat == np.nan or lat == -1:
             print(f'Geocoding {address}...')
+            for temp in range(sleep_time_between_addresses)[::-1]:
+                print(f'Waiting {temp} seconds before continuing.', end='\r')
+                time.sleep(1)
             lat, lon = geocoding_address(address)
 
             df_city.iat[index_row,index_lat] = lat
             df_city.iat[index_row,index_lon] = lon
-            for temp in range(sleep_time_between_addresses)[::-1]:
-                print(f'Waiting {temp} seconds before continuing.', end='\r')
-                time.sleep(1)
 
             counter_for_saving += 1
 
@@ -161,7 +161,7 @@ def long_search(day_stop_search = '01.01.2023', start_search_from_index = 0):
         while hour_of_search > 8 and hour_of_search < 8:
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
             print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am.')
-            time.sleep(3600)
+            time.sleep(60*60)
 
         # Starts the search
         cities_to_search = list(dict_city_number_wggesucht.keys())

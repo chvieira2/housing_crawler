@@ -17,8 +17,7 @@ from housing_crawler.utils import save_file, get_file, crawl_ind_ad_page
 from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters, simplify_address
 
 def fix_older_table(df_city, file_name, city,
-                      sess = None,
-                      sleep_time_between_addresses = 3, save_after = 3):
+                      sess = None, save_after = 3):
     '''
 
     '''
@@ -52,10 +51,6 @@ def fix_older_table(df_city, file_name, city,
             counter_for_saving += 1
 
 
-            for temp in range(1)[::-1]:
-                print(f'Waiting {temp} seconds before continuing.', end='\r')
-                time.sleep(1)
-
 
         ### Geocoding
         ## Geocoding is necessary because older searches did not include it. For newer searches this is redundant.
@@ -72,7 +67,7 @@ def fix_older_table(df_city, file_name, city,
         index_lon = list(df_city.columns).index('longitude')
         if pd.isnull(lat) or lat == np.nan or lat == -1:
             print(f'Geocoding {address}...')
-            for temp in range(sleep_time_between_addresses)[::-1]:
+            for temp in range(3)[::-1]:
                 print(f'Waiting {temp} seconds before continuing.', end='\r')
                 time.sleep(1)
             lat, lon = geocoding_address(address)

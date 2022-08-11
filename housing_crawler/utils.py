@@ -182,14 +182,21 @@ def crawl_ind_ad_page(url, sess=None):
 
     ## Look inside ad only if wg_detail exist (WGs only)
     wg_detail = soup.find_all('ul', {'class':'ul-detailed-view-datasheet print_text_left'})
-
-    if len(wg_detail) > 0:
+    if len(wg_detail) > 1:
         die_wg = wg_detail[0]
         gesucht_wird = wg_detail[1]
 
-
         ## General details
         die_wg = [cont.text.replace('\n','').strip() for cont in die_wg.find_all('li')]
+
+        # Home total size
+        home_total_size = [item for item in die_wg if 'Wohnungsgr' in item]
+        if len(home_total_size) != 0:
+            home_total_size = home_total_size[0]
+            home_total_size = re.sub(' +', ' ', home_total_size).replace('Wohnungsgröße: ','').replace('m²','').strip()
+            detail_dict['home_total_size'] = int(home_total_size)
+        else:
+            detail_dict['home_total_size'] = np.nan
 
         # Smoking
         smoking = [item for item in die_wg if 'Rauch' in item]
@@ -202,8 +209,8 @@ def crawl_ind_ad_page(url, sess=None):
 
         # WG type
         wg_type = [item for item in die_wg]
-        if len(wg_type) > 4:
-            selection = wg_type[4:]
+        if len(wg_type) > 3:
+            selection = wg_type[3:]
             wg_type = [item for item in selection if 'Bewohneralte' not in item and\
                                                 'Rauch' not in item and\
                                                 'Sprach' not in item\
@@ -419,3 +426,10 @@ def crawl_ind_ad_page(url, sess=None):
                 detail_dict['extras'] = np.nan
 
     return detail_dict
+
+
+
+
+if __name__ == "__main__":
+
+    print(crawl_ind_ad_page(url = 'https://www.wg-gesucht.de/wohnungen-in-Berlin-Mitte.8855226.html'))

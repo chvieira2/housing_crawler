@@ -204,11 +204,8 @@ class CrawlWgGesucht(Crawler):
         zero_new_ads_in_a_row = 0
         total_added_findings = 0
         for page_number in range(number_pages):
-            # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
-            for temp in range(1)[::-1]:
-                print(f'Waiting {temp} seconds before continuing.', end='\r')
-                time.sleep(1)
             # Obtaining pages
+            # No need for time.sleep here as there's already one before calling BeautifulSoup
             self.parse_urls(location_name = location_name, page_number= page_number,
                         filters = filters, sess=sess)
 
@@ -249,7 +246,7 @@ class CrawlWgGesucht(Crawler):
                     # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
                     for temp in range(2)[::-1]:
                         print(f'Waiting {temp} seconds before continuing.', end='\r')
-                        time.sleep(1)
+                        # time.sleep(1)
                     ## Get ad specific details
                     ad_details = crawl_ind_ad_page(url=ad_url,sess=sess)
 
@@ -298,6 +295,10 @@ class CrawlWgGesucht(Crawler):
 
 
                     ## Latitude and longitude
+
+                    for temp in range(2)[::-1]:
+                        print(f'Geocoding starts in {temp} seconds.', end='\r')
+                        time.sleep(1)
                     lat, lon = geocoding_address(address)
 
                     # Flatmates
@@ -429,12 +430,12 @@ class CrawlWgGesucht(Crawler):
                 zero_new_ads_in_a_row = 0
 
 
-            if zero_new_ads_in_a_row >=5:
+            if zero_new_ads_in_a_row >=3:
                 break
 
         print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv. There are now {len(old_df)} ads in total. =========')
 
-    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 50, start_search_from_index = 0):
+    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 100, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''

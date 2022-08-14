@@ -34,10 +34,20 @@ def fix_older_table(df_city, file_name, city,
 
         ### Adding ad specific info
         details_searched = df_city['details_searched'].iloc[index_row]
+
+        try:
+            published_on = df_city['published_on'].iloc[index_row].split('.')
+            month_published_on = int(published_on[1])
+            year_published_on = int(published_on[2])
+        except:
+            month_published_on = 0
+            year_published_on = 0
+
         # Check if needed
         if str(details_searched) == 'True' or str(details_searched) == 'False' or str(details_searched) == '1.0':
             pass
-        else:
+        # Search only from August 2022 on
+        elif int(month_published_on) >= 8 and int(year_published_on) >= 2022:
             ad_url = df_city['url'].iloc[index_row]
             print(f'Collecting info for ad {df_city["id"].iloc[index_row]}', end='\n')
             ads_dict = crawl_ind_ad_page(url=ad_url, sess=sess)
@@ -56,7 +66,7 @@ def fix_older_table(df_city, file_name, city,
         ## Geocoding is necessary because older searches did not include it. For newer searches this is redundant.
 
         # Simplifying address again is probably not necessary but address in older searchs were not simplified so I include this code here again.
-        df_city['address'] = df_city['address'].apply(lambda row: simplify_address(row) if len(row.split(',')) != 3 else row) # Simplified address most have 3 strings separated by 2 commas
+        # df_city['address'] = df_city['address'].apply(lambda row: simplify_address(row) if len(row.split(',')) != 3 else row) # Simplified address most have 3 strings separated by 2 commas
 
 
 
@@ -86,7 +96,6 @@ def fix_older_table(df_city, file_name, city,
 
     print(f'Finished geocoding addresses for {capitalize_city_name(german_characters(city))}. There are {len(df_city)} ads in {file_name}.')
     return df_city
-
 
 def collect_cities_csvs(cities = dict_city_number_wggesucht):
     '''

@@ -65,11 +65,6 @@ def fix_older_table(df_city, file_name, city,
         ### Geocoding
         ## Geocoding is necessary because older searches did not include it. For newer searches this is redundant.
 
-        # Simplifying address again is probably not necessary but address in older searchs were not simplified so I include this code here again.
-        # df_city['address'] = df_city['address'].apply(lambda row: simplify_address(row) if len(row.split(',')) != 3 else row) # Simplified address most have 3 strings separated by 2 commas
-
-
-
         address = df_city['address'].iloc[index_row]
         address = fix_weird_address(address).strip().replace('  ', ' ').replace(' ,', ',')
         lat = df_city['latitude'].iloc[index_row]
@@ -77,9 +72,10 @@ def fix_older_table(df_city, file_name, city,
         index_lon = list(df_city.columns).index('longitude')
         if pd.isnull(lat) or lat == np.nan or lat == -1:
             print(f'Geocoding {address}...')
-            for temp in range(3)[::-1]:
-                print(f'Waiting {temp} seconds before continuing.', end='\r')
+            for temp in range(5)[::-1]:
+                print(f'Waiting {temp} seconds before geocoding address.', end='\r')
                 time.sleep(1)
+            print('\n')
             lat, lon = geocoding_address(address)
 
             df_city.iat[index_row,index_lat] = lat

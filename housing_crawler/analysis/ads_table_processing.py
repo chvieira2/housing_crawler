@@ -262,12 +262,14 @@ def feature_engineering(ads_df):
     ads_df['day_of_week_publication'] = ads_df['published_on'].dt.day_name()
     ads_df['day_of_week_publication'] = [day[0:3] for day in list(ads_df['day_of_week_publication'])]
 
-    # Create price/sqm column
+    ## Create price/sqm column
+    # for single and multi room flats and houses, the €/m² is directly calculated.
     ads_df['price_per_sqm'] = round(ads_df['price_euros']/ads_df['size_sqm'],2)
+    # For WGs, I assume that all rooms in the flat have the same size, so I obtain total size of the flat by multiplying the room size by the number of rooms (plus one (corresponding to the kitchen)).
+    # Effectivelly the assumption about the flat size seems valid as the mean size of the offered room over a large number of ads tends to the mean of all rooms in flats. That is unless there are biases with people generally offering the smallest room in the flat, which could very well be the case.
+    ads_df["price_per_sqm"] = ads_df.apply(lambda x: x["price_per_sqm"]/(x["capacity"]) if x["type_offer_simple"] == 'WG' else x["price_per_sqm"], axis = 1)
 
     # Create available time measured in days
-#     ads_df['time_available'] = ads_df.apply(lambda x: print(x['published_on']), axis = 1)
-
     ads_df['days_available'] = ads_df.apply(lambda x: \
         get_availablility_time(published_on=x['published_on'],
                                available_to=x['available_to'],

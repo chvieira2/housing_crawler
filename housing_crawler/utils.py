@@ -4,10 +4,18 @@ import re
 import time
 import requests
 import os
+from shapely import wkt
+
+from shapely.geometry import Point, Polygon
+import geopandas as gpd
+
 from bs4 import BeautifulSoup
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import HardwareType, Popularity
 from config.config import ROOT_DIR
+from housing_crawler.params import dict_city_number_wggesucht
+from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters, simplify_address
+
 
 def create_dir(path):
     # Check whether the specified path exists or not
@@ -140,9 +148,9 @@ def crawl_ind_ad_page(url, sess=None):
         extra_costs = [item for item in extra_costs if 'Sonstige Kosten' in item]
         try:
             extra_costs = extra_costs[0].replace('Sonstige Kosten:','').strip().replace('€','')
-            detail_dict['extra_costs_euros'] = np.nan if extra_costs == 'n.a.' else int(extra_costs)
+            detail_dict['extra_costs_euros'] = 0 if extra_costs == 'n.a.' else int(extra_costs)
         except IndexError:
-            detail_dict['extra_costs_euros'] = np.nan
+            detail_dict['extra_costs_euros'] = 0
 
     ## Transfer costs
     transfer_costs = list(soup.find('table', {'class':'table'}).find_all('tr'))
@@ -151,13 +159,13 @@ def crawl_ind_ad_page(url, sess=None):
         transfer_costs = [item for item in transfer_costs if 'Ablösevereinbarung' in item]
         try:
             transfer_costs = transfer_costs[0].replace('Ablösevereinbarung:','').strip().replace('€','')
-            detail_dict['transfer_costs_euros'] = np.nan if transfer_costs == 'n.a.' else int(transfer_costs)
+            detail_dict['transfer_costs_euros'] = 0 if transfer_costs == 'n.a.' else int(transfer_costs)
         except IndexError:
-            detail_dict['transfer_costs_euros'] = np.nan
+            detail_dict['transfer_costs_euros'] = 0
 
     ## Schufa needed
-    transfer_costs = list(soup.find('table', {'class':'table'}).find_all('tr'))
-    if len(transfer_costs) > 0 and 'SCHUFA erwünscht' in str(transfer_costs):
+    info = list(soup.find('table', {'class':'table'}).find_all('tr'))
+    if len(info) > 0 and 'SCHUFA erwünscht' in str(info):
         detail_dict['Schufa_needed'] = True
 
     ## Deposit
@@ -427,9 +435,39 @@ def crawl_ind_ad_page(url, sess=None):
 
     return detail_dict
 
+def lat_lon_to_polygon(df_grid):
+    """Receives a dataframe with coordinates columns and adds a column of respective polygons"""
+    polygons = []
+    for _, row in df_grid.iterrows():
+        polygons.append(Polygon([Point(row['lat_start'],row['lng_start']),
+                                  Point(row['lat_start'],row['lng_end']),
+                                  Point(row['lat_end'],row['lng_start']),
+                                  Point(row['lat_end'],row['lng_end'])]))
+    df_grid['geometry'] = polygons
+    return df_grid
 
+def get_grid_polygons_all_cities():
+    try:
+        df_feats = gpd.read_file(f'{ROOT_DIR}/housing_crawler/data/grid_all_cities.geojson', driver='GeoJSON')
+        if 'grid_in_location' in df_feats.columns:
+            df_feats = df_feats.drop(columns=['lat_start','lat_end','lng_start','lng_end','lat_center','lng_center', 'grid_in_location'])
+    except:
+        for city in list(dict_city_number_wggesucht.keys()):
 
+            city_feats_df = get_file(file_name=f'FeatCount_{standardize_characters(city)}_grid_200m.csv', local_file_path=f'housing_crawler/data/{standardize_characters(city)}/WorkingTables')
+            city_feats_df = city_feats_df[city_feats_df['grid_in_location']].reset_index(drop=True)
+            city_feats_df = gpd.GeoDataFrame(lat_lon_to_polygon(city_feats_df), geometry='geometry', crs='wgs84')
+            try:
+                df_feats = pd.concat([df_feats, city_feats_df])
+            except:
+                df_feats = city_feats_df.copy()
+
+        df_feats = df_feats.drop(columns=['lat_start','lat_end','lng_start','lng_end','lat_center','lng_center', 'grid_in_location'])
+
+        df_feats.to_file(f'{ROOT_DIR}/housing_crawler/data/grid_all_cities.geojson', driver='GeoJSON')
+
+    return df_feats
 
 if __name__ == "__main__":
 
-    print(crawl_ind_ad_page(url = 'https://www.wg-gesucht.de/wohnungen-in-Berlin-Mitte.8855226.html'))
+    get_grid_polygons_all_cities()

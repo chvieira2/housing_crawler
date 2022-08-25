@@ -92,7 +92,7 @@ def geocoding_address(address, sleep_time = 900, retry=True):
             pass
 
         # If still haven't found anything
-        if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
+        if pd.isnull(lat) or pd.isnull(lon):
             # Retry without street
             try:
                 zip_code = address.split(',')[1].strip().replace('  ', ' ')
@@ -106,9 +106,9 @@ def geocoding_address(address, sleep_time = 900, retry=True):
                 pass
 
         # If still haven't found anything
-        if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
+        if pd.isnull(lat) or pd.isnull(lon):
             print('Could not find latitude and longitude.')
-            lat,lon = -1,-1
+            lat,lon = 0,0
         else:
             print(f'Found latitude = {lat} and longitude = {lon}')
 

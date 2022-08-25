@@ -5,16 +5,13 @@ from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'. Needed to remove SettingWithCopyWarning warning when assigning new value to dataframe column
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import seaborn as sns
-import plotly.express as px
 
-import statsmodels.formula.api as smf
-import scipy.stats as stats
+from shapely.geometry import Point, Polygon
+import geopandas as gpd
+from shapely import wkt
 
-from housing_crawler.utils import save_file, get_file, crawl_ind_ad_page
+
+from housing_crawler.utils import save_file, get_file, get_grid_polygons_all_cities
 
 
 def prepare_data(ads_df):
@@ -26,9 +23,10 @@ def prepare_data(ads_df):
                                             'available from':'available_from',
                                             'available to':'available_to',
                                             'Schufa_needed':'schufa_needed',
-                                             'TV':'tv'})
+                                             'TV':'tv',
+                                             'landlord_type':'commercial_landlord'})
 
-    ads_df['landlord_type'] = ads_df['landlord_type'].replace('s','Verifiziert').replace('VerifiziertesUnternehmen','Verifiziert')
+    ads_df['commercial_landlord'] = ads_df['commercial_landlord'].replace('s','Verifiziert').replace('VerifiziertesUnternehmen','Verifiziert')
 
 
     ## Preapare data types
@@ -103,10 +101,25 @@ def transform_columns_into_numerical(ads_df):
     # 1 = allowed to turn into WG
     # 0 = not allowed to turn into WG (no response)
     # NaN = not searched for details (see details_searched)
-
     ads_df['wg_possible'] = [0 if item != item else 1 for item in ads_df['wg_possible']] # np.nan doesn't equals itself
     ads_df.loc[ads_df['details_searched'] == 0, 'wg_possible'] = np.nan
     ads_df.loc[ads_df['type_offer_simple'] == 'WG', 'wg_possible'] = 1.0
+
+
+    ## schufa_needed
+    # Schufa requested for rental
+    # 1 = requested
+    # 0 = not requested (no response)
+    # NaN = not searched for details (see details_searched)
+    ads_df['schufa_needed'] = [0 if item != item else 1 for item in ads_df['schufa_needed']]
+    ads_df.loc[ads_df['details_searched'] == 0, 'schufa_needed'] = np.nan
+
+    ## commercial_landlord
+    # 1 = commercial
+    # 0 = private
+    # NaN = no answer
+    mapping_dict = {'Private':0, 'Verifiziert':1}
+    ads_df['commercial_landlord']= ads_df['commercial_landlord'].map(mapping_dict)
 
 
     ## building_floor
@@ -197,15 +210,15 @@ def transform_columns_into_numerical(ads_df):
     ads_df['min_age_flatmates'] = np.nan
     ads_df['min_age_flatmates'] = [np.nan if item != item else \
                                    np.nan if str(item).startswith('bis') else \
-                               re.findall('[0-9]+', item)[0] \
+                               float(re.findall('[0-9]+', item)[0]) \
                                for item in list(ads_df['age_range'])]
 
     # max age range
     ads_df['max_age_flatmates'] = np.nan
     ads_df['max_age_flatmates'] = [np.nan if item != item else \
                                    np.nan if str(item).startswith('ab') else \
-                                   re.findall('[0-9]+', item)[0] if str(item).startswith('bis') else \
-                               re.findall('[0-9]+', item)[1] \
+                                   float(re.findall('[0-9]+', item)[0]) if str(item).startswith('bis') else \
+                               float(re.findall('[0-9]+', item)[1]) \
                                for item in list(ads_df['age_range'])]
 
     return ads_df
@@ -227,7 +240,7 @@ def hot_encode_columns(ads_df):
         ads_df[option_name] = np.nan
         ads_df.loc[ads_df['details_searched'] == 1.0, option_name] = 0.0
         ads_df.loc[[option in item if item==item else False for item in ads_df['wg_type'] ], option_name] = 1
-#     ads_df = ads_df.drop(columns=['wg_type'])
+    ads_df = ads_df.drop(columns=['wg_type'])
 
 
     ## tv
@@ -241,7 +254,7 @@ def hot_encode_columns(ads_df):
         ads_df[option_name] = np.nan
         ads_df.loc[ads_df['details_searched'] == 1.0, option_name] = 0.0
         ads_df.loc[[option in item if item==item else False for item in ads_df['tv'] ], option_name] = 1
-#     ads_df = ads_df.drop(columns=['tv'])
+    ads_df = ads_df.drop(columns=['tv'])
 
     return ads_df
 
@@ -267,7 +280,7 @@ def feature_engineering(ads_df):
     ads_df['price_per_sqm'] = round(ads_df['price_euros']/ads_df['size_sqm'],2)
     # For WGs, I assume that all rooms in the flat have the same size, so I obtain total size of the flat by multiplying the room size by the number of rooms (plus one (corresponding to the kitchen)).
     # Effectivelly the assumption about the flat size seems valid as the mean size of the offered room over a large number of ads tends to the mean of all rooms in flats. That is unless there are biases with people generally offering the smallest room in the flat, which could very well be the case.
-    ads_df["price_per_sqm"] = ads_df.apply(lambda x: x["price_per_sqm"]/(x["capacity"]) if x["type_offer_simple"] == 'WG' else x["price_per_sqm"], axis = 1)
+    # ads_df["price_per_sqm"] = ads_df.apply(lambda x: x["price_per_sqm"]/(x["capacity"]) if x["type_offer_simple"] == 'WG' else x["price_per_sqm"], axis = 1)
 
     # Create available time measured in days
     ads_df['days_available'] = ads_df.apply(lambda x: \
@@ -275,22 +288,143 @@ def feature_engineering(ads_df):
                                available_to=x['available_to'],
                                available_from=x['available_from']), axis = 1)
 
+    # Create availability term
+    # 1 = long term (>365 days)
+    # 0.75 = mid-long term (>270 and <365 days)
+    # 0.5 = mid term (>180 and <270 days)
+    # 0.25 = mid-short term (>90 and <180 days)
+    # 0 = short term (<90 days)
+    ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: 0 if x<90 else 0.25 if x<180 else 0.5 if x<270 else 0.75 if x<365 else 1)
+
+
+
+    ########### Collect OpenStreetMaps features
+    # Filter for only ads with identifiable coordinates
+    ads_df = ads_df[ads_df['latitude'].notna()].reset_index(drop=True)
+    ads_df = ads_df[ads_df['longitude'].notna()].reset_index(drop=True)
+
+
+    ads_df = ads_df[ads_df['latitude'] > 0]
+    ads_df = ads_df[ads_df['longitude'] > 0]
+
+    ads_df['coords'] = list(zip(ads_df['latitude'],ads_df['longitude']))
+    ads_df['geometry'] = ads_df['coords'].apply(Point)
+    ads_df = gpd.GeoDataFrame(ads_df, geometry='geometry', crs='wgs84').drop(columns=['coords'])
+
+    # Collect features
+    df_feats = get_grid_polygons_all_cities()
+
+    # Merge features into ads dataframe
+    ads_df = gpd.sjoin(ads_df,df_feats,how="left").drop(columns=['geometry', 'index_right'])
+
+
+    ### Polar transformation
+    # degrees_to_centroid
+    degrees = 360
+    ads_df['sin_degrees_to_centroid'] = np.sin(2*np.pi*ads_df.degrees_to_centroid/degrees)
+    ads_df['cos_degrees_to_centroid'] = np.cos(2*np.pi*ads_df.degrees_to_centroid/degrees)
+
+    ads_df.drop('degrees_to_centroid', axis=1, inplace=True)
+
+    # published_at = hour of the day
+    hours_day = 24
+    ads_df['sin_published_at'] = np.sin(2*np.pi*ads_df.published_at/hours_day)
+    ads_df['cos_published_at'] = np.cos(2*np.pi*ads_df.published_at/hours_day)
+
+    # day_of_week_publication = day of the week of publication
+    ads_df['day_week_int'] = ads_df['day_of_week_publication'].map({'Mon':1,
+                                                                    'Tue':2,
+                                                                    'Wed':3,
+                                                                    'Thu':4,
+                                                                    'Fri':5,
+                                                                    'Sat':6,
+                                                                    'Sun':7})
+    days_week = 7
+    ads_df['sin_day_week_int'] = np.sin(2*np.pi*ads_df.day_week_int/days_week)
+    ads_df['cos_day_week_int'] = np.cos(2*np.pi*ads_df.day_week_int/days_week)
+
+    ads_df.drop('day_week_int', axis=1, inplace=True)
+
+
+
+
+
+    save_file(ads_df, file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
     return ads_df
 
+def imputing_values(ads_df):
+
+    ## transfer_costs_euros
+    # Contract transfer costs (mostly relevant for flat/houses)
+    # Ablösevereinbarung
+    # 0 = 0, n.a. response or no response
+    # NaN = not searched for details (see details_searched)
+    ads_df['transfer_costs_euros'] = ads_df.transfer_costs_euros.replace(np.nan, 0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'transfer_costs_euros'] = np.nan
+
+    ## extra_costs_euros
+    # Extra costs
+    # Sonstige Kosten
+    # 0 = 0, n.a. response or no response
+    # NaN = not searched for details (see details_searched)
+    ads_df['extra_costs_euros'] = ads_df.extra_costs_euros.replace(np.nan, 0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'extra_costs_euros'] = np.nan
+
+    ## mandatory_costs_euros
+    # Living costs (water, heat, internet...)
+    # Nebenkosten
+    # 0 = 0, n.a. response or no response
+    # NaN = not searched for details (see details_searched)
+    ads_df['mandatory_costs_euros'] = ads_df.mandatory_costs_euros.replace(np.nan, 0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'mandatory_costs_euros'] = np.nan
+
+    ## deposit
+    # Deposit paid at the start of contract
+    # Kaution
+    # 0 = 0, n.a. response or no response
+    # NaN = not searched for details (see details_searched)
+    ads_df['deposit'] = ads_df.deposit.replace(np.nan, 0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'deposit'] = np.nan
+
+    ## number_languages
+    # Number of languages spoken at home
+    # Sprach
+    # Assumed every house must speak at least one language. If no languages are given, assume German is spoken.
+    # NaN = not searched for details (see details_searched)
+    ads_df['languages_deutsch'] = ads_df.apply(lambda x: 1 if x['number_languages']!= x['number_languages'] else x['languages_deutsch'], axis =1)
+    ads_df.loc[ads_df['details_searched'] == 0, 'languages_deutsch'] = np.nan
+
+    ads_df['number_languages'] = ads_df.number_languages.replace(np.nan, 0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'number_languages'] = np.nan
+
+    return ads_df
+
+def get_processed_ads_table(update_table=False):
+    try:
+        if ~update_table:
+            return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
+    except FileNotFoundError:
+        all_ads = get_file(file_name='all_encoded.csv', local_file_path='housing_crawler/data')
+
+        df_processed = prepare_data(ads_df = all_ads)
+        df_processed = filter_out_bad_entries(ads_df = df_processed, country = 'Germany',
+                            price_max = 6000, price_min = 50,
+                            size_max = 400, size_min = 3,
+                            date_max = None, date_min = None, date_format = "%d.%m.%Y")
+
+        df_processed = transform_columns_into_numerical(ads_df = df_processed)
+        df_processed = hot_encode_columns(ads_df = df_processed)
+        df_processed = feature_engineering(ads_df = df_processed)
+        df_processed = imputing_values(ads_df = df_processed)
+
+        df_processed = df_processed.drop_duplicates(subset = ['id'], keep='first')
+
+        return df_processed
 
 
 if __name__ == "__main__":
-    all_ads = get_file(file_name='all_encoded.csv', local_file_path=f'housing_crawler/data').rename(columns={'WG_size':'capacity', 'available from':'available_from', 'available to':'available_to', 'Schufa_needed':'schufa_needed', 'TV':'tv'})
 
-
-    df_processed = all_ads.copy()
-    df_processed = prepare_data(ads_df = df_processed)
-    df_processed = filter_out_bad_entries(ads_df = df_processed, country = 'Germany',
-                           price_max = 6000, price_min = 50,
-                          size_max = 400, size_min = 3,
-                          date_max = None, date_min = None, date_format = "%d.%m.%Y")
-    # df_processed = transform_columns_into_numerical(ads_df = df_processed)
-    # df_processed = feature_engineering(ads_df = df_processed)
+    df_processed = get_processed_ads_table()
 
     print(df_processed.info())
 

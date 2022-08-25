@@ -22,7 +22,7 @@ class Crawler:
     HEADERS = {
         'Connection': 'keep-alive',
         'Pragma': 'no-cache',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'max-age=0', #'no-cache',
         'Upgrade-Insecure-Requests': '1',
         'User-Agent': user_agent_rotator.get_random_user_agent(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;'
@@ -33,12 +33,15 @@ class Crawler:
         'Sec-Fetch-User': '?1',
         'Sec-Fetch-Dest': 'document',
         'Accept-Language': 'en-US,en;q=0.9',
-        'referer':'https://www.google.com/'
+        'referer':'https://www.wg-gesucht.de/'
     }
 
     def rotate_user_agent(self):
         """Choose a new random user agent"""
         self.HEADERS['User-Agent'] = self.user_agent_rotator.get_random_user_agent()
+
+        self.HEADERS['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.82 Safari/537.36'
+
 
     def get_soup_from_url(self, url):
         """Creates a Soup object from the HTML at the provided URL"""

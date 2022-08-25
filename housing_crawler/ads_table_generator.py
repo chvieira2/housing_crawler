@@ -37,17 +37,19 @@ def fix_older_table(df_city, file_name, city,
 
         try:
             published_on = df_city['published_on'].iloc[index_row].split('.')
+            day_published_on = int(published_on[0])
             month_published_on = int(published_on[1])
             year_published_on = int(published_on[2])
         except:
+            day_published_on = 0
             month_published_on = 0
             year_published_on = 0
 
         # Check if needed
-        if str(details_searched) == 'True' or str(details_searched) == 'False' or str(details_searched) == '1.0':
+        if details_searched == details_searched: # means that details_searched is not NaN
             pass
         # Search only from August 2022 on
-        elif int(month_published_on) >= 8 and int(year_published_on) >= 2022:
+        elif int(day_published_on) >= 25 and int(month_published_on) >= 7 and int(year_published_on) >= 2022:
             ad_url = df_city['url'].iloc[index_row]
             print(f'Collecting info for ad {df_city["id"].iloc[index_row]}', end='\n')
             ads_dict = crawl_ind_ad_page(url=ad_url, sess=sess)
@@ -72,7 +74,7 @@ def fix_older_table(df_city, file_name, city,
         index_lon = list(df_city.columns).index('longitude')
         if pd.isnull(lat) or lat == np.nan or lat == -1:
             print(f'Geocoding {address}...')
-            for temp in range(5)[::-1]:
+            for temp in range(10)[::-1]:
                 print(f'Waiting {temp} seconds before geocoding address.', end='\r')
                 time.sleep(1)
             print('\n')

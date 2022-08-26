@@ -121,11 +121,11 @@ def prepare_data(ads_df):
     ads_df.loc[ads_df['details_searched'] == 0, 'energy_certificate'] = np.nan
 
 
-    ads_df['kennwert'] = np.nan
-    ads_df['kennwert'] = [np.nan if item != item else \
+    ads_df['energy_usage'] = np.nan
+    ads_df['energy_usage'] = [np.nan if item != item else \
         int(str(item).split('V: ')[1].split('kW h/')[0]) if 'kW h/' in item else np.nan \
         for item in list(ads_df['energy'])]
-    ads_df.loc[ads_df['details_searched'] == 0, 'kennwert'] = np.nan
+    ads_df.loc[ads_df['details_searched'] == 0, 'energy_usage'] = np.nan
 
 
     ads_df['energy_efficiency_class'] = np.nan
@@ -158,16 +158,6 @@ def prepare_data(ads_df):
     ads_df.loc[ads_df['details_searched'] == 0, 'heating_energy_source'] = np.nan
 
     ads_df = ads_df.drop(columns=['energy'])
-
-
-    ## toilet
-    ads_df['toilet'] = np.nan
-    ads_df['toilet'] = [np.nan if item != item else \
-        'individual' if 'Eigenes Bad' in item else \
-        'shared' if 'Badmitbenutzung' in item else \
-        'not available' if 'Nicht vorhanden' in item else np.nan \
-        for item in list(ads_df['shower_type'])]
-    ads_df.loc[ads_df['details_searched'] == 0, 'toilet'] = np.nan
 
     return ads_df
 
@@ -310,6 +300,20 @@ def transform_columns_into_numerical(ads_df):
     ads_df.loc[ads_df['details_searched'] == 0, 'internet_speed'] = np.nan
 
 
+    ## toilet
+    # 1 = individual
+    # 0.5 = shared
+    # 0 = not available
+    # NaN = no response or not searched for details (see details_searched)
+    ads_df['toilet'] = np.nan
+    ads_df['toilet'] = [np.nan if item != item else \
+        1 if 'Eigenes Bad' in item else \
+        0.5 if 'Badmitbenutzung' in item else \
+        0 if 'Nicht vorhanden' in item else np.nan \
+        for item in list(ads_df['shower_type'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'toilet'] = np.nan
+
+
 
     return ads_df
 
@@ -440,7 +444,7 @@ def feature_engineering(ads_df):
     ads_df.loc[ads_df['details_searched'] == 0, 'kitchen_numerical'] = np.nan
 
 
-    ## smoking
+    ## smoking_numerical
     # 1 = allowed everywhere
     # 0.75 = allowed in room
     # 0.5 = allowed in the balcony (outside)
@@ -570,11 +574,11 @@ def imputing_values(ads_df):
 
     return ads_df
 
-def get_processed_ads_table(update_table=False):
-    # try:
-    #     if ~update_table:
-    #         return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
-    # except FileNotFoundError:
+def get_processed_ads_table(update_table=True):
+    try:
+        if ~update_table:
+            return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
+    except FileNotFoundError:
         all_ads = get_file(file_name='all_encoded.csv', local_file_path='housing_crawler/data')
 
         df_processed = prepare_data(ads_df = all_ads)

@@ -138,7 +138,6 @@ class CrawlWgGesucht(Crawler):
                         time_now = time.mktime(time.localtime())
                         print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for page to allow connection again.')
                         time.sleep(sleep_time)
-                        continue
                     elif len(new_findings) == 0:
                         time_now = time.mktime(time.localtime())
                         print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for CAPTCH to disappear....')

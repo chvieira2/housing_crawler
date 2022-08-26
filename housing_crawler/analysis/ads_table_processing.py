@@ -52,11 +52,61 @@ def prepare_data(ads_df):
     ads_df['type_offer_simple'] = ['House' if ('Haus' in offer_type) else offer_type for offer_type in list(ads_df['type_offer_simple'])]
     ads_df = ads_df.drop(columns=['type_offer'])
 
+
+
+    ## Age range flatmates
+    # min age range flatmates
+    ads_df['min_age_flatmates'] = np.nan
+    ads_df['min_age_flatmates'] = [np.nan if item != item else \
+                                   np.nan if str(item).startswith('bis') else \
+                               float(re.findall('[0-9]+', item)[0]) \
+                               for item in list(ads_df['age_range'])]
+    # max age range flatmates
+    ads_df['max_age_flatmates'] = np.nan
+    ads_df['max_age_flatmates'] = [np.nan if item != item else \
+                                   np.nan if str(item).startswith('ab') else \
+                                   float(re.findall('[0-9]+', item)[0]) if str(item).startswith('bis') else \
+                               float(re.findall('[0-9]+', item)[1]) \
+                               for item in list(ads_df['age_range'])]
+    ads_df = ads_df.drop(columns=['age_range'])
+
+
+
+    ## gender_search
+    # gender searched
+    ads_df['gender_searched'] = np.nan
+    ads_df['gender_searched'] = ['Egal' if item != item else \
+                                'Divers' if 'Divers' in item else \
+                                'Frau' if 'Frau' in item else \
+                                'Mann' if 'Mann' in item else \
+                                'Egal' \
+                                for item in list(ads_df['gender_search'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'gender_searched'] = np.nan
+
+    ## Age searched
+    # min age range searched
+    ads_df['min_age_searched'] = np.nan
+    ads_df['min_age_searched'] = [0 if item != item else \
+                                   0 if 'bis' in item else \
+                                   int(min(re.findall('[0-9]+', item))) if 'zwischen' in item else \
+                               int(re.findall('[0-9]+', item)[0]) if 'ab' in item else 0\
+                               for item in list(ads_df['gender_search'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'min_age_searched'] = np.nan
+
+    # max age range searched
+    ads_df['max_age_searched'] = np.nan
+    ads_df['max_age_searched'] = [99 if item != item else \
+                                   99 if 'ab' in item else \
+                                   int(max(re.findall('[0-9]+', item))) if 'zwischen' in item else \
+                               int(re.findall('[0-9]+', item)[0]) if 'bis' in item else 99\
+                               for item in list(ads_df['gender_search'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'max_age_searched'] = np.nan
+
+    ads_df = ads_df.drop(columns=['gender_search'])
+
     return ads_df
 
 def filter_out_bad_entries(ads_df, country = 'Germany',
-                           price_max = 4000, price_min = 50,
-                          size_max = 400, size_min = 3,
                           date_max = None, date_min = None, date_format = "%d.%m.%Y"):
 
     try:
@@ -80,10 +130,25 @@ def filter_out_bad_entries(ads_df, country = 'Germany',
 
 
     ## Filter out unrealistic offers
-    ads_df = ads_df.query(f'price_euros <= {price_max}\
-                         & price_euros > {price_min}\
-                         & size_sqm <= {size_max}\
-                         & size_sqm >= {size_min}')
+    ads_df['keep'] = False
+    ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "WG"\
+                    and x['price_euros'] <= 3000\
+                    and x['price_euros'] > 100\
+                    and x['size_sqm'] <= 60\
+                    and x['size_sqm'] >= 5) else x['keep'], axis=1)
+
+    ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "Single-room flat"\
+                    and x['price_euros'] <= 3000\
+                    and x['price_euros'] > 100\
+                    and x['size_sqm'] <= 100\
+                    and x['size_sqm'] >= 10) else x['keep'], axis=1)
+
+    ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "Apartment"\
+                    and x['price_euros'] <= 6000\
+                    and x['price_euros'] > 200\
+                    and x['size_sqm'] <= 300\
+                    and x['size_sqm'] >= 25) else x['keep'], axis=1)
+    ads_df = ads_df[ads_df['keep']].drop(columns=['keep'])
 
     if country.lower() in ['germany', 'de']:
         # Germany bounding box coordinates from here: https://gist.github.com/graydon/11198540
@@ -158,40 +223,10 @@ def transform_columns_into_numerical(ads_df):
     # NaN = indicates lack of response or not searched for details (see details_searched)
     ads_df['public_transport_distance'] = ads_df['public_transport_distance'].apply(lambda x: np.nan if x!=x else int(x.split(' Min')[0]))
 
-
-    ## extras
-    # 1 = yes
-    # 0 = no answer (assumed to not exist)
-    # NaN = not searched for details (see details_searched)
-    unique_extras = ['Waschmaschine', 'Spülmaschine', 'Terrasse', 'Balkon', 'Garten', 'Gartenmitbenutzung', 'Keller', 'Aufzug',
-                     'Haustiere', 'Fahrradkeller', 'Dachboden']
-
-    for option in unique_extras:
-        option_name = 'extras_' + option.lower().replace('ü','ue')
-        ads_df[option_name] = np.nan
-        ads_df.loc[ads_df['details_searched'] == 1.0, option_name] = 0.0
-        ads_df.loc[[option in item if item==item else False for item in ads_df['extras'] ], option_name] = 1
-    ads_df = ads_df.drop(columns=['extras'])
-
-
-    ## languages
-    # 1 = yes
-    # 0 = no answer (assumed to not exist)
-    # NaN = not searched for details (see details_searched)
-    unique_languages = ['Deutsch', 'Englisch']
-
-    for option in unique_languages:
-        option_name = 'languages_' + option.lower()
-        ads_df[option_name] = np.nan
-        ads_df.loc[ads_df['details_searched'] == 1.0, option_name] = 0.0
-        ads_df.loc[[option in item if item==item else False for item in ads_df['languages']], option_name] = 1
-
     ## Number of languages
-    # NaN = no answer or not searched for details (see details_searched)
-    ads_df['number_languages'] = ads_df['languages'].apply(lambda x: len(str(x).split(',')) if x == x else np.nan)
-
-
-    ads_df = ads_df.drop(columns=['languages'])
+    # 1 if no answer was given
+    # NaN = not searched for details (see details_searched)
+    ads_df['number_languages'] = ads_df['languages'].apply(lambda x: len(str(x).split(',')) if x == x else 1)
 
 
     ## smoking
@@ -205,56 +240,54 @@ def transform_columns_into_numerical(ads_df):
     ads_df.loc[ads_df['details_searched'] == 0, 'smoking'] = np.nan
 
 
-    ## Age range
-    # min age range
-    ads_df['min_age_flatmates'] = np.nan
-    ads_df['min_age_flatmates'] = [np.nan if item != item else \
-                                   np.nan if str(item).startswith('bis') else \
-                               float(re.findall('[0-9]+', item)[0]) \
-                               for item in list(ads_df['age_range'])]
-
-    # max age range
-    ads_df['max_age_flatmates'] = np.nan
-    ads_df['max_age_flatmates'] = [np.nan if item != item else \
-                                   np.nan if str(item).startswith('ab') else \
-                                   float(re.findall('[0-9]+', item)[0]) if str(item).startswith('bis') else \
-                               float(re.findall('[0-9]+', item)[1]) \
-                               for item in list(ads_df['age_range'])]
 
     return ads_df
 
-def hot_encode_columns(ads_df):
+def my_hot_encoder(df, cat_name, unique_terms, drop = False):
+
+    for term in unique_terms:
+        term_name = cat_name + '_' + term.lower().replace('ü','ue').replace('-wg','').replace(' wg','').replace('wg ','')\
+        .replace('ä','ae').replace(' ','_').replace('/','_').replace('-','_').replace('+','')
+        df[term_name] = np.nan
+        df.loc[df['details_searched'] == 1.0, term_name] = 0
+        df.loc[[term in item if item==item else False for item in df[cat_name] ], term_name] = 1
+
+    if drop:
+        df = df.drop(columns=[cat_name])
+    return df
+
+def split_cat_columns(ads_df):
+    '''
+    Convert columsn with several terms per row into individual rows.
+    '''
+
+    ## extras
+    ads_df = my_hot_encoder(df=ads_df,
+                           cat_name = 'extras',
+                           unique_terms = ['Waschmaschine', 'Spülmaschine', 'Terrasse',
+                                           'Balkon', 'Garten', 'Gartenmitbenutzung', 'Keller', 'Aufzug', 'Haustiere', 'Fahrradkeller', 'Dachboden'],
+                           drop = True)
+
+
+    ## languages
+    ads_df = my_hot_encoder(df=ads_df,
+                           cat_name = 'languages',
+                           unique_terms = ['Deutsch', 'Englisch'],
+                           drop = True)
 
 
     ## wg_type
-    # 1 = yes
-    # 0 = no answer (assumed to not exist)
-    # NaN = not searched for details (see details_searched)
-    unique_wg_type = ['Studenten-WG', 'keine Zweck-WG', 'Männer-WG', 'Business-WG', 'Wohnheim', 'Vegetarisch/Vegan',
-                   'Alleinerziehende', 'funktionale WG', 'Berufstätigen-WG', 'gemischte WG', 'WG mit Kindern',
-                   'Verbindung', 'LGBTQIA+', 'Senioren-WG', 'inklusive WG', 'WG-Neugründung']
-
-    for option in unique_wg_type:
-        option_name = 'wg_type_' + option.lower().replace('-wg','').replace(' wg','').replace('wg ','')\
-        .replace('ä','ae').replace(' ','_').replace('/','_').replace('-','_').replace('+','')
-        ads_df[option_name] = np.nan
-        ads_df.loc[ads_df['details_searched'] == 1.0, option_name] = 0.0
-        ads_df.loc[[option in item if item==item else False for item in ads_df['wg_type'] ], option_name] = 1
-    ads_df = ads_df.drop(columns=['wg_type'])
+    ads_df = my_hot_encoder(df=ads_df,
+                           cat_name = 'wg_type',
+                           unique_terms = ['Studenten-WG', 'keine Zweck-WG', 'Männer-WG', 'Business-WG', 'Wohnheim', 'Vegetarisch/Vegan', 'Alleinerziehende', 'funktionale WG', 'Berufstätigen-WG', 'gemischte WG', 'WG mit Kindern', 'Verbindung', 'LGBTQIA+', 'Senioren-WG', 'inklusive WG', 'WG-Neugründung'],
+                           drop = True)
 
 
     ## tv
-    # 1 = yes
-    # 0 = no answer (assumed to not exist)
-    # NaN = no answer or not searched for details (see details_searched)
-    unique_tv = ['Kabel', 'Satellit']
-
-    for option in unique_tv:
-        option_name = 'tv_' + option.lower()
-        ads_df[option_name] = np.nan
-        ads_df.loc[ads_df['details_searched'] == 1.0, option_name] = 0.0
-        ads_df.loc[[option in item if item==item else False for item in ads_df['tv'] ], option_name] = 1
-    ads_df = ads_df.drop(columns=['tv'])
+    ads_df = my_hot_encoder(df=ads_df,
+                           cat_name = 'tv',
+                           unique_terms = ['Kabel', 'Satellit'],
+                           drop = True)
 
     return ads_df
 
@@ -266,7 +299,7 @@ def get_availablility_time(published_on, available_to, available_from):
         available_from = published_on
 
     if pd.isnull(available_to):
-        return 365
+        return 365*2
 
     return int((available_to-available_from).days)
 
@@ -289,12 +322,28 @@ def feature_engineering(ads_df):
                                available_from=x['available_from']), axis = 1)
 
     # Create availability term
-    # 1 = long term (>365 days)
-    # 0.75 = mid-long term (>270 and <365 days)
-    # 0.5 = mid term (>180 and <270 days)
-    # 0.25 = mid-short term (>90 and <180 days)
-    # 0 = short term (<90 days)
-    ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: 0 if x<90 else 0.25 if x<180 else 0.5 if x<270 else 0.75 if x<365 else 1)
+    # very long term (>=540 days)
+    # long term (>=365 and <540 days)
+    # mid-long term (>=270 and <365 days)
+    # mid term (>=180 and <270 days)
+    # mid-short term (>=90 and <180 days)
+    # short term (<90 days)
+    ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: '<90days' if x<90 else '<180days' if x<180 else '<270days' if x<270 else '<365days' if x<365 else '<540days' if x<540 else '>=540days')
+
+
+
+    #### Searched flatmate age
+    # senior (>=60 years old)
+    # mature (>=40 and <60 years old)
+    # adult (>=30 and <40 years old)
+    # young (<30 years old)
+    # teen (<20 years old)
+    ads_df['max_age_searched_encoded'] = ads_df['max_age_searched'].apply(lambda x: '20' if x<20 else '30' if x<30 else '40' if x<40 else '60' if x<60 else '100')
+    ads_df['min_age_searched_encoded'] = ads_df['min_age_searched'].apply(lambda x: '20' if x<20 else '30' if x<30 else '40' if x<40 else '60' if x<60 else '100')
+    ads_df['age_category_searched'] = ads_df['min_age_searched_encoded'] + '_' + ads_df['max_age_searched_encoded']
+
+    ads_df = ads_df.drop(columns=['min_age_searched_encoded', 'max_age_searched_encoded'])
+
 
 
 
@@ -318,7 +367,10 @@ def feature_engineering(ads_df):
     ads_df = gpd.sjoin(ads_df,df_feats,how="left").drop(columns=['geometry', 'index_right'])
 
 
-    ### Polar transformation
+
+
+
+    #### Polar transformation #####
     # degrees_to_centroid
     degrees = 360
     ads_df['sin_degrees_to_centroid'] = np.sin(2*np.pi*ads_df.degrees_to_centroid/degrees)
@@ -348,7 +400,6 @@ def feature_engineering(ads_df):
 
 
 
-
     save_file(ads_df, file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
     return ads_df
 
@@ -359,7 +410,7 @@ def imputing_values(ads_df):
     # Ablösevereinbarung
     # 0 = 0, n.a. response or no response
     # NaN = not searched for details (see details_searched)
-    ads_df['transfer_costs_euros'] = ads_df.transfer_costs_euros.replace(np.nan, 0)
+    ads_df['transfer_costs_euros'] = ads_df['transfer_costs_euros'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'transfer_costs_euros'] = np.nan
 
     ## extra_costs_euros
@@ -367,7 +418,7 @@ def imputing_values(ads_df):
     # Sonstige Kosten
     # 0 = 0, n.a. response or no response
     # NaN = not searched for details (see details_searched)
-    ads_df['extra_costs_euros'] = ads_df.extra_costs_euros.replace(np.nan, 0)
+    ads_df['extra_costs_euros'] = ads_df['extra_costs_euros'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'extra_costs_euros'] = np.nan
 
     ## mandatory_costs_euros
@@ -375,7 +426,7 @@ def imputing_values(ads_df):
     # Nebenkosten
     # 0 = 0, n.a. response or no response
     # NaN = not searched for details (see details_searched)
-    ads_df['mandatory_costs_euros'] = ads_df.mandatory_costs_euros.replace(np.nan, 0)
+    ads_df['mandatory_costs_euros'] = ads_df['mandatory_costs_euros'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'mandatory_costs_euros'] = np.nan
 
     ## deposit
@@ -383,7 +434,7 @@ def imputing_values(ads_df):
     # Kaution
     # 0 = 0, n.a. response or no response
     # NaN = not searched for details (see details_searched)
-    ads_df['deposit'] = ads_df.deposit.replace(np.nan, 0)
+    ads_df['deposit'] = ads_df['deposit'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'deposit'] = np.nan
 
     ## number_languages
@@ -400,20 +451,18 @@ def imputing_values(ads_df):
     return ads_df
 
 def get_processed_ads_table(update_table=False):
-    try:
-        if ~update_table:
-            return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
-    except FileNotFoundError:
+    # try:
+    #     if ~update_table:
+    #         return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
+    # except FileNotFoundError:
         all_ads = get_file(file_name='all_encoded.csv', local_file_path='housing_crawler/data')
 
         df_processed = prepare_data(ads_df = all_ads)
         df_processed = filter_out_bad_entries(ads_df = df_processed, country = 'Germany',
-                            price_max = 6000, price_min = 50,
-                            size_max = 400, size_min = 3,
                             date_max = None, date_min = None, date_format = "%d.%m.%Y")
 
         df_processed = transform_columns_into_numerical(ads_df = df_processed)
-        df_processed = hot_encode_columns(ads_df = df_processed)
+        df_processed = split_cat_columns(ads_df = df_processed)
         df_processed = feature_engineering(ads_df = df_processed)
         df_processed = imputing_values(ads_df = df_processed)
 
@@ -426,7 +475,7 @@ if __name__ == "__main__":
 
     df_processed = get_processed_ads_table()
 
-    print(df_processed.info())
+    # print(df_processed.info())
 
 
     # sorted(df_processed.columns, reverse=False)

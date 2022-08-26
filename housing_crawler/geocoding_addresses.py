@@ -33,7 +33,6 @@ def geocoding_address(address, sleep_time = 900, retry=True):
     url = 'https://nominatim.openstreetmap.org/search/' + urllib.parse.quote(address) +'?format=json'
     HEADERS = {
         'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2919.83 Safari/537.36',
-        'User-Agent': 'carloshvieira2@gmail.com',
     }
 
     # Loop until request is successfull

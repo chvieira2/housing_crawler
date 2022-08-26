@@ -45,7 +45,6 @@ def save_file(df, file_name, local_file_path='housing_crawler/data/berlin'):
     df.to_csv(local_path, index=False)
     print(f"===> {file_name} saved locally")
 
-
 def get_soup_from_url( url, sess = None, sleep_times = (1,2)):
     """
     Creates a Soup object from the HTML at the provided URL
@@ -65,7 +64,7 @@ def get_soup_from_url( url, sess = None, sleep_times = (1,2)):
     HEADERS = {
             'Connection': 'keep-alive',
             'Pragma': 'no-cache',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'max-age=0', #'no-cache',
             'Upgrade-Insecure-Requests': '1',
             'User-Agent': user_agent_rotator.get_random_user_agent(),
             'Accept': 'text/html,application/xhtml+xml,application/xml;'
@@ -76,7 +75,7 @@ def get_soup_from_url( url, sess = None, sleep_times = (1,2)):
             'Sec-Fetch-User': '?1',
             'Sec-Fetch-Dest': 'document',
             'Accept-Language': 'en-US,en;q=0.9',
-            'referer':'https://www.google.com/'
+        'referer':'https://www.wg-gesucht.de/'
         }
     resp = sess.get(url, headers=HEADERS)
 
@@ -467,6 +466,31 @@ def get_grid_polygons_all_cities():
         df_feats.to_file(f'{ROOT_DIR}/housing_crawler/data/grid_all_cities.geojson', driver='GeoJSON')
 
     return df_feats
+
+def standardize_features(df, features):
+    df_standardized = df.copy()
+    for f in features:
+        mu = df[f].mean()
+        sigma = df[f].std()
+        df_standardized[f] = df[f].map(lambda x: (x - mu) / sigma)
+    return df_standardized
+
+def return_significative_coef(model):
+    """
+    Returns p_value, lower and upper bound coefficients
+    from a statsmodels object.
+    """
+    # Extract p_values
+    p_values = model.pvalues.reset_index()
+    p_values.columns = ['variable', 'p_value']
+
+    # Extract coef_int
+    coef = model.params.reset_index()
+    coef.columns = ['variable', 'coef']
+    return p_values.merge(coef,
+                          on='variable')\
+                   .query("p_value<0.05").sort_values(by='coef',
+                                                      ascending=False)
 
 if __name__ == "__main__":
 

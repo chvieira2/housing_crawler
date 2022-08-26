@@ -104,6 +104,71 @@ def prepare_data(ads_df):
 
     ads_df = ads_df.drop(columns=['gender_search'])
 
+
+    ## energy
+    ads_df['construction_year'] = np.nan
+    ads_df['construction_year'] = [np.nan if item != item else \
+        int(str(item).split('Baujahr ')[1].split(',')[0]) if 'Baujahr ' in item else np.nan \
+        for item in list(ads_df['energy'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'construction_year'] = np.nan
+
+
+    ads_df['energy_certificate'] = np.nan
+    ads_df['energy_certificate'] = [np.nan if item != item else \
+        'Verbrauchsausweis' if 'Verbrauchsausweis' in item else \
+        'Bedarfsausweis' if 'Bedarfsausweis' in item else np.nan \
+        for item in list(ads_df['energy'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'energy_certificate'] = np.nan
+
+
+    ads_df['kennwert'] = np.nan
+    ads_df['kennwert'] = [np.nan if item != item else \
+        int(str(item).split('V: ')[1].split('kW h/')[0]) if 'kW h/' in item else np.nan \
+        for item in list(ads_df['energy'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'kennwert'] = np.nan
+
+
+    ads_df['energy_efficiency_class'] = np.nan
+    ads_df['energy_efficiency_class'] = [np.nan if item != item else \
+        str(item).split('Energieeffizienzklasse ')[1].split(',')[0] if 'Energieeffizienzklasse' in item else np.nan \
+        for item in list(ads_df['energy'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'energy_efficiency_class'] = np.nan
+
+
+    ads_df['heating_energy_source'] = np.nan
+    ads_df['heating_energy_source'] = [np.nan if item != item else \
+        'oil' if 'Öl' in item else \
+        'geothermal' if 'Erdwärme' in item else \
+        'solar' if 'Solar' in item else \
+        'wood pellets' if 'Holzpellets' in item else \
+        'gas' if 'Gas' in item else \
+        'steam district heating' if 'Fernwärme-Dampft' in item else \
+        'distant district heating' if 'Fernwärme' in item else \
+        'coal/coke' if 'Kohle/Koks' in item else \
+        'coal' if 'Kohle' in item else \
+        'light natural gas' if 'Erdgas leicht' in item else \
+        'heavy natural gas' if 'Erdgas schwer' in item else \
+        'LPG' if 'Flüssiggas' in item else \
+        'wood' if 'Holz' in item else \
+        'wood chips' if 'Holz-Hackschnitzel' in item else \
+        'local district heating' if 'Nahwärme' in item else \
+        'delivery' if 'Wärmelieferung' in item else \
+        'eletricity' if 'Strom' in item else np.nan \
+        for item in list(ads_df['energy'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'heating_energy_source'] = np.nan
+
+    ads_df = ads_df.drop(columns=['energy'])
+
+
+    ## toilet
+    ads_df['toilet'] = np.nan
+    ads_df['toilet'] = [np.nan if item != item else \
+        'individual' if 'Eigenes Bad' in item else \
+        'shared' if 'Badmitbenutzung' in item else \
+        'not available' if 'Nicht vorhanden' in item else np.nan \
+        for item in list(ads_df['shower_type'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'toilet'] = np.nan
+
     return ads_df
 
 def filter_out_bad_entries(ads_df, country = 'Germany',
@@ -187,6 +252,20 @@ def transform_columns_into_numerical(ads_df):
     ads_df['commercial_landlord']= ads_df['commercial_landlord'].map(mapping_dict)
 
 
+    ## energy_efficiency_class
+    # 9 = A+
+    # 8 = A
+    # 7 = B
+    # 6 = C
+    # 5 = D
+    # 4 = E
+    # 3 = F
+    # 2 = G
+    # 1 = H
+    # NaN = no answer
+    mapping_dict = {'H':1, 'G':2, 'F':3, 'E':4, 'D':5, 'C':6, 'B':7, 'A':8, 'A+':9}
+    ads_df['energy_efficiency_class']= ads_df['energy_efficiency_class'].map(mapping_dict)
+
     ## building_floor
     # indicates the level from the ground. Ground level is 0.
     # Ambiguous values were given fractional definitions ('Hochparterre':0.5, 'Tiefparterre':-0.5).
@@ -195,27 +274,6 @@ def transform_columns_into_numerical(ads_df):
     mapping_dict = {'EG':0, '1. OG':1, '2. OG':2, '3. OG':3, '4. OG':4, '5. OG':5, 'höher als 5. OG':6,
                     'Hochparterre':0.5, 'Dachgeschoss':2, 'Tiefparterre':-0.5, 'Keller':-1}
     ads_df['building_floor']= ads_df['building_floor'].map(mapping_dict)
-
-
-    ## furniture
-    # 1 = möbliert
-    # 0.5 = teilmöbliert
-    # 0 = no answer (assumed to be not furnitured)
-    # NaN = not searched for details (see details_searched)
-    mapping_dict = {'möbliert':1, 'teilmöbliert':0.5, 'möbliert, teilmöbliert':0.5}
-    ads_df['furniture']= ads_df['furniture'].map(mapping_dict).replace(np.nan,0)
-    ads_df.loc[ads_df['details_searched'] == 0, 'furniture'] = np.nan
-
-
-    ## kitchen
-    # 1 = kitchen ('Eigene Küche' or 'Einbauküche')
-    # 0.75 = 'Kochnische' (room + kitchen)
-    # 0.5 = 'Küchenmitbenutzung' (shared kitchen)
-    # 0 = no kitchen (Nicht vorhanden [not available] or no response)
-    # NaN = not searched for details (see details_searched)
-    mapping_dict = {'Nicht vorhanden':0, 'Küchenmitbenutzung':0.5, 'Kochnische':0.75, 'Eigene Küche':1, 'Einbauküche':1}
-    ads_df['kitchen']= ads_df['kitchen'].map(mapping_dict).replace(np.nan,0)
-    ads_df.loc[ads_df['details_searched'] == 0, 'kitchen'] = np.nan
 
 
     ## public_transport_distance
@@ -229,15 +287,27 @@ def transform_columns_into_numerical(ads_df):
     ads_df['number_languages'] = ads_df['languages'].apply(lambda x: len(str(x).split(',')) if x == x else 1)
 
 
-    ## smoking
-    # 1 = allowed everywhere
-    # 0.75 = allowed in room
-    # 0.5 = allowed in the balcony (outside)
-    # 0 = not allowed or no response
-    # NaN = not searched for details (see details_searched)
-    mapping_dict = {'Rauchen nicht erwünscht':0, 'Rauchen auf dem Balkon erlaubt':0.5, 'Rauchen im Zimmer erlaubt':0.75, 'Rauchen überall erlaubt':1}
-    ads_df['smoking']= ads_df['smoking'].map(mapping_dict).replace(np.nan,0)
-    ads_df.loc[ads_df['details_searched'] == 0, 'smoking'] = np.nan
+    ## internet_speed
+    # 1 = '<10 Mbit/s' or '1-3 Mbit/s'
+    # 2 = '7-10 Mbit/s'
+    # 3 = '11-16 Mbit/s'
+    # 4 = '17-25 Mbit/s'
+    # 5 = '26-50 Mbit/s'
+    # 6 = '50-100 Mbit/s'
+    # 7 = '>100 Mbit/s'
+    # NaN = no response or not searched for details (see details_searched)
+    ads_df['internet_speed'] = np.nan
+    ads_df['internet_speed'] = [np.nan if item != item else \
+        1 if 'langsamer als 10 Mbit/s' in item else \
+        1 if '1-3 Mbit/s' in item else \
+        2 if '7-10 Mbit/s' in item else \
+        3 if '11-16 Mbit/s' in item else \
+        4 if '17-25 Mbit/s' in item else \
+        5 if '26-50 Mbit/s' in item else \
+        6 if '50-100 Mbit/s' in item else \
+        7 if 'schneller als 100 Mbit/s' in item else np.nan \
+        for item in list(ads_df['internet'])]
+    ads_df.loc[ads_df['details_searched'] == 0, 'internet_speed'] = np.nan
 
 
 
@@ -260,6 +330,24 @@ def split_cat_columns(ads_df):
     '''
     Convert columsn with several terms per row into individual rows.
     '''
+
+    ## internet
+    ads_df = my_column_splitter(df=ads_df,
+                           cat_name = 'internet',
+                           unique_terms = ['DSL', 'WLAN', 'Flatrate'],
+                           drop = True)
+
+    ## shower_type
+    ads_df = my_column_splitter(df=ads_df,
+                           cat_name = 'shower_type',
+                           unique_terms = ['Badewanne', 'Dusche'],
+                           drop = True)
+
+    ## floor_type
+    ads_df = my_column_splitter(df=ads_df,
+                           cat_name = 'floor_type',
+                           unique_terms = ['Dielen', 'Parkett', 'Laminat', 'Teppich', 'Fliesen', 'PVC', 'Fußbodenheizung'],
+                           drop = True)
 
     ## extras
     ads_df = my_column_splitter(df=ads_df,
@@ -329,6 +417,38 @@ def feature_engineering(ads_df):
     # mid-short term (>=90 and <180 days)
     # short term (<90 days)
     ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: '<90days' if x<90 else '<180days' if x<180 else '<270days' if x<270 else '<365days' if x<365 else '<540days' if x<540 else '>=540days')
+
+
+    ## furniture
+    # 1 = möbliert
+    # 0.5 = teilmöbliert
+    # 0 = no answer (assumed to be not furnitured)
+    # NaN = not searched for details (see details_searched)
+    mapping_dict = {'möbliert':1, 'teilmöbliert':0.5, 'möbliert, teilmöbliert':0.5}
+    ads_df['furniture_numerical']= ads_df['furniture'].map(mapping_dict).replace(np.nan,0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'furniture_numerical'] = np.nan
+
+
+    ## kitchen
+    # 1 = kitchen ('Eigene Küche' or 'Einbauküche')
+    # 0.75 = 'Kochnische' (room + kitchen)
+    # 0.5 = 'Küchenmitbenutzung' (shared kitchen)
+    # 0 = no kitchen (Nicht vorhanden [not available] or no response)
+    # NaN = not searched for details (see details_searched)
+    mapping_dict = {'Nicht vorhanden':0, 'Küchenmitbenutzung':0.5, 'Kochnische':0.75, 'Eigene Küche':1, 'Einbauküche':1}
+    ads_df['kitchen_numerical']= ads_df['kitchen'].map(mapping_dict).replace(np.nan,0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'kitchen_numerical'] = np.nan
+
+
+    ## smoking
+    # 1 = allowed everywhere
+    # 0.75 = allowed in room
+    # 0.5 = allowed in the balcony (outside)
+    # 0 = not allowed or no response
+    # NaN = not searched for details (see details_searched)
+    mapping_dict = {'Rauchen nicht erwünscht':0, 'Rauchen auf dem Balkon erlaubt':0.5, 'Rauchen im Zimmer erlaubt':0.75, 'Rauchen überall erlaubt':1}
+    ads_df['smoking_numerical']= ads_df['smoking'].map(mapping_dict).replace(np.nan,0)
+    ads_df.loc[ads_df['details_searched'] == 0, 'smoking_numerical'] = np.nan
 
 
 
@@ -475,7 +595,7 @@ if __name__ == "__main__":
 
     df_processed = get_processed_ads_table()
 
-    # print(df_processed.info())
+    print(df_processed.info())
 
 
     # sorted(df_processed.columns, reverse=False)

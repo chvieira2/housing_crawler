@@ -139,6 +139,8 @@ def crawl_ind_ad_page(url, sess=None):
             detail_dict['mandatory_costs_euros'] = np.nan if mandatory_costs == 'n.a.' else int(mandatory_costs)
         except IndexError:
             detail_dict['mandatory_costs_euros'] = np.nan
+    else:
+        detail_dict['mandatory_costs_euros'] = 0
 
     ## Extra costs
     extra_costs = list(soup.find('table', {'class':'table'}).find_all('tr'))
@@ -150,6 +152,8 @@ def crawl_ind_ad_page(url, sess=None):
             detail_dict['extra_costs_euros'] = 0 if extra_costs == 'n.a.' else int(extra_costs)
         except IndexError:
             detail_dict['extra_costs_euros'] = 0
+    else:
+        detail_dict['extra_costs_euros'] = 0
 
     ## Transfer costs
     transfer_costs = list(soup.find('table', {'class':'table'}).find_all('tr'))
@@ -161,6 +165,8 @@ def crawl_ind_ad_page(url, sess=None):
             detail_dict['transfer_costs_euros'] = 0 if transfer_costs == 'n.a.' else int(transfer_costs)
         except IndexError:
             detail_dict['transfer_costs_euros'] = 0
+    else:
+        detail_dict['transfer_costs_euros'] = 0
 
     ## Schufa needed
     info = list(soup.find('table', {'class':'table'}).find_all('tr'))
@@ -171,6 +177,8 @@ def crawl_ind_ad_page(url, sess=None):
     kosten = soup.find('input', {'id':'kaution'})
     if kosten is not None:
         detail_dict['deposit'] = np.nan if kosten['value'] == 'n.a.' else int(kosten['value'])
+    else:
+        detail_dict['deposit'] = 0
 
     ## ZIP code
     address = soup.find('div', {'class':'col-sm-4 mb10'}).find('a')

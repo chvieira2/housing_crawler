@@ -6,3 +6,6 @@ raw_data/
 *.csv
 **/__pycache__/
 .env
+*.geojson
+*.ipynb
+notebooks/

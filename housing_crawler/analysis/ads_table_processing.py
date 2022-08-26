@@ -243,7 +243,7 @@ def transform_columns_into_numerical(ads_df):
 
     return ads_df
 
-def my_hot_encoder(df, cat_name, unique_terms, drop = False):
+def my_column_splitter(df, cat_name, unique_terms, drop = False):
 
     for term in unique_terms:
         term_name = cat_name + '_' + term.lower().replace('ü','ue').replace('-wg','').replace(' wg','').replace('wg ','')\
@@ -262,7 +262,7 @@ def split_cat_columns(ads_df):
     '''
 
     ## extras
-    ads_df = my_hot_encoder(df=ads_df,
+    ads_df = my_column_splitter(df=ads_df,
                            cat_name = 'extras',
                            unique_terms = ['Waschmaschine', 'Spülmaschine', 'Terrasse',
                                            'Balkon', 'Garten', 'Gartenmitbenutzung', 'Keller', 'Aufzug', 'Haustiere', 'Fahrradkeller', 'Dachboden'],
@@ -270,21 +270,21 @@ def split_cat_columns(ads_df):
 
 
     ## languages
-    ads_df = my_hot_encoder(df=ads_df,
+    ads_df = my_column_splitter(df=ads_df,
                            cat_name = 'languages',
                            unique_terms = ['Deutsch', 'Englisch'],
                            drop = True)
 
 
     ## wg_type
-    ads_df = my_hot_encoder(df=ads_df,
+    ads_df = my_column_splitter(df=ads_df,
                            cat_name = 'wg_type',
                            unique_terms = ['Studenten-WG', 'keine Zweck-WG', 'Männer-WG', 'Business-WG', 'Wohnheim', 'Vegetarisch/Vegan', 'Alleinerziehende', 'funktionale WG', 'Berufstätigen-WG', 'gemischte WG', 'WG mit Kindern', 'Verbindung', 'LGBTQIA+', 'Senioren-WG', 'inklusive WG', 'WG-Neugründung'],
                            drop = True)
 
 
     ## tv
-    ads_df = my_hot_encoder(df=ads_df,
+    ads_df = my_column_splitter(df=ads_df,
                            cat_name = 'tv',
                            unique_terms = ['Kabel', 'Satellit'],
                            drop = True)

@@ -207,6 +207,7 @@ class CrawlWgGesucht(Crawler):
         print('Making first call to set filters')
         url_set_filters = self.url_builder(location_name = location_name, page_number = 1,
                     filters = filters)
+        sess.get(url_set_filters, headers=self.HEADERS)
 
         # Rotate agent
         self.rotate_user_agent()

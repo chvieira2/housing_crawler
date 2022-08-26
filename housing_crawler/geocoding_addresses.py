@@ -33,6 +33,10 @@ def geocoding_address(address, sleep_time = 900, retry=True):
     url = 'https://nominatim.openstreetmap.org/search/' + urllib.parse.quote(address) +'?format=json'
     HEADERS = {
         'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2919.83 Safari/537.36',
+<<<<<<< HEAD
+=======
+        'User-Agent': 'carloshvieira2@gmail.com',
+>>>>>>> 9cfa029a02f024e3dad41fb5965c138325dd4946
     }
 
     # Loop until request is successfull
@@ -91,7 +95,11 @@ def geocoding_address(address, sleep_time = 900, retry=True):
             pass
 
         # If still haven't found anything
+<<<<<<< HEAD
         if pd.isnull(lat) or pd.isnull(lon):
+=======
+        if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
+>>>>>>> 9cfa029a02f024e3dad41fb5965c138325dd4946
             # Retry without street
             try:
                 zip_code = address.split(',')[1].strip().replace('  ', ' ')
@@ -105,9 +113,15 @@ def geocoding_address(address, sleep_time = 900, retry=True):
                 pass
 
         # If still haven't found anything
+<<<<<<< HEAD
         if pd.isnull(lat) or pd.isnull(lon):
             print('Could not find latitude and longitude.')
             lat,lon = 0,0
+=======
+        if pd.isnull(lat) or pd.isnull(lon) or lat == 0 or lon == 0:
+            print('Could not find latitude and longitude.')
+            lat,lon = -1,-1
+>>>>>>> 9cfa029a02f024e3dad41fb5965c138325dd4946
         else:
             print(f'Found latitude = {lat} and longitude = {lon}')
 

@@ -56,7 +56,7 @@ class CrawlWgGesucht(Crawler):
                 '-in-'+ location_name_for_url + '.' + self.dict_city_number_wggesucht.get(location_name) +\
                     filter_code + str(page_number) + '.html'
 
-    def get_soup_from_url(self, url, sess = None, sleep_times = (2,3)):
+    def get_soup_from_url(self, url, sess = None):
         """
         Creates a Soup object from the HTML at the provided URL
 
@@ -68,17 +68,13 @@ class CrawlWgGesucht(Crawler):
             print('Opening session')
             sess = requests.session()
 
-        # Sleeping for random seconds to avoid overload of requests
-        sleeptime = np.random.uniform(sleep_times[0], sleep_times[1])
-        print(f"Waiting {round(sleeptime,2)} seconds to try connecting to:\n{url}")
-        time.sleep(sleeptime)
-
         # Setup an agent
         # print('Rotating agent')
         self.rotate_user_agent()
 
         # Second page load
-        # print(f"Connecting to page...")
+        print(f"Connecting to:\n{url}")
+        time.sleep(3)
         resp = sess.get(url, headers=self.HEADERS)
         # print(f"Got response code {resp.status_code}")
 
@@ -258,9 +254,10 @@ class CrawlWgGesucht(Crawler):
                 else:
                     # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
                     # No sleep between searches is needed because wg-gesucht CAPTCH seems to be triggered by total number of accesses
-                    # for temp in range(2)[::-1]:
-                    #     print(f'Waiting {temp} seconds before continuing.', end='\r')
-                        # time.sleep(1)
+                    for temp in range(20)[::-1]:
+                        print(f'Waiting {temp} seconds before continuing.', end='\r')
+                        time.sleep(1)
+                    print('\n')
                     ## Get ad specific details
                     ad_details = crawl_ind_ad_page(url=ad_url,sess=sess)
 

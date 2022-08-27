@@ -48,9 +48,15 @@ def fix_older_table(df_city, file_name, city,
         # Check if needed
         if details_searched == details_searched: # means that details_searched is not NaN
             pass
-        # Search only from August 2022 on
+        # Search only from specific date
         elif int(day_published_on) >= 25 and int(month_published_on) >= 7 and int(year_published_on) >= 2022:
             ad_url = df_city['url'].iloc[index_row]
+
+            # Sleep time to avoid CAPTCH
+            for temp in range(20)[::-1]:
+                print(f'Waiting {temp} seconds before continuing.', end='\r')
+                time.sleep(1)
+            print('\n')
             print(f'Collecting info for ad {df_city["id"].iloc[index_row]}', end='\n')
             ads_dict = crawl_ind_ad_page(url=ad_url, sess=sess)
 

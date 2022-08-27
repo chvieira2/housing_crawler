@@ -102,7 +102,7 @@ def crawl_ind_ad_page(url, sess=None):
     while not success:
         soup = get_soup_from_url(url, sess=sess)
         if soup is None:
-            print('Error during connection ======\n The ad does not exist.')
+            print('Error during connection ======\n The ad might not exist.')
             return detail_dict
         else:
             try:

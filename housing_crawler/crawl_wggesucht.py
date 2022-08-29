@@ -254,7 +254,7 @@ class CrawlWgGesucht(Crawler):
                 else:
                     # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
                     # No sleep between searches is needed because wg-gesucht CAPTCH seems to be triggered by total number of accesses
-                    for temp in range(20)[::-1]:
+                    for temp in range(30)[::-1]:
                         print(f'Waiting {temp} seconds before continuing.', end='\r')
                         time.sleep(1)
                     print('\n')

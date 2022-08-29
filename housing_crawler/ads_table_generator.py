@@ -53,7 +53,7 @@ def fix_older_table(df_city, file_name, city,
             ad_url = df_city['url'].iloc[index_row]
 
             # Sleep time to avoid CAPTCH
-            for temp in range(20)[::-1]:
+            for temp in range(30)[::-1]:
                 print(f'Waiting {temp} seconds before continuing.', end='\r')
                 time.sleep(1)
             print('\n')

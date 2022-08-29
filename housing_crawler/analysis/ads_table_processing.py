@@ -6,12 +6,12 @@ import numpy as np
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'. Needed to remove SettingWithCopyWarning warning when assigning new value to dataframe column
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 import geopandas as gpd
-from shapely import wkt
 
 
 from housing_crawler.utils import save_file, get_file, get_grid_polygons_all_cities
+from housing_crawler.string_utils import standardize_characters
 
 
 def prepare_data(ads_df):
@@ -221,7 +221,7 @@ def transform_columns_into_numerical(ads_df):
     # 1 = allowed to turn into WG
     # 0 = not allowed to turn into WG (no response)
     # NaN = not searched for details (see details_searched)
-    ads_df['wg_possible'] = [0 if item != item else 1 for item in ads_df['wg_possible']] # np.nan doesn't equals itself
+    ads_df['wg_possible'] = [0.0 if item != item else 1.0 for item in ads_df['wg_possible']] # np.nan doesn't equals itself
     ads_df.loc[ads_df['details_searched'] == 0, 'wg_possible'] = np.nan
     ads_df.loc[ads_df['type_offer_simple'] == 'WG', 'wg_possible'] = 1.0
 
@@ -231,14 +231,14 @@ def transform_columns_into_numerical(ads_df):
     # 1 = requested
     # 0 = not requested (no response)
     # NaN = not searched for details (see details_searched)
-    ads_df['schufa_needed'] = [0 if item != item else 1 for item in ads_df['schufa_needed']]
+    ads_df['schufa_needed'] = [0.0 if item != item else 1.0 for item in ads_df['schufa_needed']]
     ads_df.loc[ads_df['details_searched'] == 0, 'schufa_needed'] = np.nan
 
     ## commercial_landlord
     # 1 = commercial
     # 0 = private
     # NaN = no answer
-    mapping_dict = {'Private':0, 'Verifiziert':1}
+    mapping_dict = {'Private':0.0, 'Verifiziert':1.0}
     ads_df['commercial_landlord']= ads_df['commercial_landlord'].map(mapping_dict)
 
 
@@ -274,7 +274,7 @@ def transform_columns_into_numerical(ads_df):
     ## Number of languages
     # 1 if no answer was given
     # NaN = not searched for details (see details_searched)
-    ads_df['number_languages'] = ads_df['languages'].apply(lambda x: len(str(x).split(',')) if x == x else 1)
+    ads_df['number_languages'] = ads_df['languages'].apply(lambda x: len(str(x).split(',')) if x == x else 1.0)
 
 
     ## internet_speed
@@ -307,9 +307,9 @@ def transform_columns_into_numerical(ads_df):
     # NaN = no response or not searched for details (see details_searched)
     ads_df['toilet'] = np.nan
     ads_df['toilet'] = [np.nan if item != item else \
-        1 if 'Eigenes Bad' in item else \
+        1.0 if 'Eigenes Bad' in item else \
         0.5 if 'Badmitbenutzung' in item else \
-        0 if 'Nicht vorhanden' in item else np.nan \
+        0.0 if 'Nicht vorhanden' in item else np.nan \
         for item in list(ads_df['shower_type'])]
     ads_df.loc[ads_df['details_searched'] == 0, 'toilet'] = np.nan
 
@@ -323,8 +323,8 @@ def my_column_splitter(df, cat_name, unique_terms, drop = False):
         term_name = cat_name + '_' + term.lower().replace('ü','ue').replace('-wg','').replace(' wg','').replace('wg ','')\
         .replace('ä','ae').replace(' ','_').replace('/','_').replace('-','_').replace('+','')
         df[term_name] = np.nan
-        df.loc[df['details_searched'] == 1.0, term_name] = 0
-        df.loc[[term in item if item==item else False for item in df[cat_name] ], term_name] = 1
+        df.loc[df['details_searched'] == 1.0, term_name] = 0.0
+        df.loc[[term in item if item==item else False for item in df[cat_name] ], term_name] = 1.0
 
     if drop:
         df = df.drop(columns=[cat_name])
@@ -428,8 +428,8 @@ def feature_engineering(ads_df):
     # 0.5 = teilmöbliert
     # 0 = no answer (assumed to be not furnitured)
     # NaN = not searched for details (see details_searched)
-    mapping_dict = {'möbliert':1, 'teilmöbliert':0.5, 'möbliert, teilmöbliert':0.5}
-    ads_df['furniture_numerical']= ads_df['furniture'].map(mapping_dict).replace(np.nan,0)
+    mapping_dict = {'möbliert':1.0, 'teilmöbliert':0.5, 'möbliert, teilmöbliert':0.5}
+    ads_df['furniture_numerical']= ads_df['furniture'].map(mapping_dict).replace(np.nan,0.0)
     ads_df.loc[ads_df['details_searched'] == 0, 'furniture_numerical'] = np.nan
 
 
@@ -439,8 +439,8 @@ def feature_engineering(ads_df):
     # 0.5 = 'Küchenmitbenutzung' (shared kitchen)
     # 0 = no kitchen (Nicht vorhanden [not available] or no response)
     # NaN = not searched for details (see details_searched)
-    mapping_dict = {'Nicht vorhanden':0, 'Küchenmitbenutzung':0.5, 'Kochnische':0.75, 'Eigene Küche':1, 'Einbauküche':1}
-    ads_df['kitchen_numerical']= ads_df['kitchen'].map(mapping_dict).replace(np.nan,0)
+    mapping_dict = {'Nicht vorhanden':0.0, 'Küchenmitbenutzung':0.5, 'Kochnische':0.75, 'Eigene Küche':1.0, 'Einbauküche':1.0}
+    ads_df['kitchen_numerical']= ads_df['kitchen'].map(mapping_dict).replace(np.nan,0.0)
     ads_df.loc[ads_df['details_searched'] == 0, 'kitchen_numerical'] = np.nan
 
 
@@ -450,8 +450,8 @@ def feature_engineering(ads_df):
     # 0.5 = allowed in the balcony (outside)
     # 0 = not allowed or no response
     # NaN = not searched for details (see details_searched)
-    mapping_dict = {'Rauchen nicht erwünscht':0, 'Rauchen auf dem Balkon erlaubt':0.5, 'Rauchen im Zimmer erlaubt':0.75, 'Rauchen überall erlaubt':1}
-    ads_df['smoking_numerical']= ads_df['smoking'].map(mapping_dict).replace(np.nan,0)
+    mapping_dict = {'Rauchen nicht erwünscht':0.0, 'Rauchen auf dem Balkon erlaubt':0.5, 'Rauchen im Zimmer erlaubt':0.75, 'Rauchen überall erlaubt':1.0}
+    ads_df['smoking_numerical']= ads_df['smoking'].map(mapping_dict).replace(np.nan,0.0)
     ads_df.loc[ads_df['details_searched'] == 0, 'smoking_numerical'] = np.nan
 
 
@@ -529,6 +529,7 @@ def feature_engineering(ads_df):
 
 def imputing_values(ads_df):
 
+    #### Imputting zero-value when there has been no answer to costs
     ## transfer_costs_euros
     # Contract transfer costs (mostly relevant for flat/houses)
     # Ablösevereinbarung
@@ -536,6 +537,7 @@ def imputing_values(ads_df):
     # NaN = not searched for details (see details_searched)
     ads_df['transfer_costs_euros'] = ads_df['transfer_costs_euros'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'transfer_costs_euros'] = np.nan
+
 
     ## extra_costs_euros
     # Extra costs
@@ -545,6 +547,7 @@ def imputing_values(ads_df):
     ads_df['extra_costs_euros'] = ads_df['extra_costs_euros'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'extra_costs_euros'] = np.nan
 
+
     ## mandatory_costs_euros
     # Living costs (water, heat, internet...)
     # Nebenkosten
@@ -552,6 +555,7 @@ def imputing_values(ads_df):
     # NaN = not searched for details (see details_searched)
     ads_df['mandatory_costs_euros'] = ads_df['mandatory_costs_euros'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'mandatory_costs_euros'] = np.nan
+
 
     ## deposit
     # Deposit paid at the start of contract
@@ -561,24 +565,50 @@ def imputing_values(ads_df):
     ads_df['deposit'] = ads_df['deposit'].replace(np.nan, 0).fillna(0)
     ads_df.loc[ads_df['details_searched'] == 0, 'deposit'] = np.nan
 
+
     ## number_languages
     # Number of languages spoken at home
     # Sprach
     # Assumed every house must speak at least one language. If no languages are given, assume German is spoken.
     # NaN = not searched for details (see details_searched)
-    ads_df['languages_deutsch'] = ads_df.apply(lambda x: 1 if x['number_languages']!= x['number_languages'] else x['languages_deutsch'], axis =1)
+    ads_df['languages_deutsch'] = ads_df.apply(lambda x: 1.0 if x['number_languages']!= x['number_languages'] else x['languages_deutsch'], axis =1)
     ads_df.loc[ads_df['details_searched'] == 0, 'languages_deutsch'] = np.nan
 
     ads_df['number_languages'] = ads_df.number_languages.replace(np.nan, 0)
     ads_df.loc[ads_df['details_searched'] == 0, 'number_languages'] = np.nan
 
+    #### Imputting categorical values when there has been no answer
+    ## energy_certificate
+    ads_df['energy_certificate'] = ads_df['energy_certificate'].replace(np.nan, 'no_answer')
+    ads_df.loc[ads_df['details_searched'] == 0, 'energy_certificate'] = np.nan
+
+
+    ## heating_energy_source
+    ads_df['heating_energy_source'] = ads_df['heating_energy_source'].replace(np.nan, 'no_answer')
+    ads_df.loc[ads_df['details_searched'] == 0, 'heating_energy_source'] = np.nan
+
+
+    ## heating
+    ads_df['heating'] = ads_df['heating'].replace(np.nan, 'no_answer')
+    ads_df.loc[ads_df['details_searched'] == 0, 'heating'] = np.nan
+
+
+    ## parking
+    ads_df['parking'] = ads_df['parking'].replace(np.nan, 'no_answer')
+    ads_df.loc[ads_df['details_searched'] == 0, 'parking'] = np.nan
+
+
+    ## building_type
+    ads_df['building_type'] = ads_df['building_type'].replace(np.nan, 'no_answer')
+    ads_df.loc[ads_df['details_searched'] == 0, 'building_type'] = np.nan
+
     return ads_df
 
 def get_processed_ads_table(update_table=True):
-    try:
-        if ~update_table:
-            return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
-    except FileNotFoundError:
+    # try:
+    #     if ~update_table:
+    #         return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
+    # except FileNotFoundError:
         all_ads = get_file(file_name='all_encoded.csv', local_file_path='housing_crawler/data')
 
         df_processed = prepare_data(ads_df = all_ads)

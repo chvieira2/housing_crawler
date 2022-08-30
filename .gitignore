@@ -7,6 +7,6 @@ raw_data/
 **/__pycache__/
 .env
 *.geojson
-*.ipynb
+# *.ipynb
 *.html
 # notebooks/

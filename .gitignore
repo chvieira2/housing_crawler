@@ -8,4 +8,5 @@ raw_data/
 .env
 *.geojson
 *.ipynb
-notebooks/
+*.html
+# notebooks/

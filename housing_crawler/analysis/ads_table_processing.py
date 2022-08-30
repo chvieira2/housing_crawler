@@ -605,10 +605,10 @@ def imputing_values(ads_df):
     return ads_df
 
 def get_processed_ads_table(update_table=True):
-    # try:
-    #     if ~update_table:
-    #         return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
-    # except FileNotFoundError:
+    try:
+        if ~update_table:
+            return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
+    except FileNotFoundError:
         all_ads = get_file(file_name='all_encoded.csv', local_file_path='housing_crawler/data')
 
         df_processed = prepare_data(ads_df = all_ads)

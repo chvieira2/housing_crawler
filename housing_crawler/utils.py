@@ -460,7 +460,7 @@ def get_grid_polygons_all_cities():
             df_feats = df_feats.drop(columns=['lat_start','lat_end','lng_start','lng_end','lat_center','lng_center', 'grid_in_location'])
     except:
         for city in list(dict_city_number_wggesucht.keys()):
-
+            # Transform grids into polygons
             city_feats_df = get_file(file_name=f'FeatCount_{standardize_characters(city)}_grid_200m.csv', local_file_path=f'housing_crawler/data/{standardize_characters(city)}/WorkingTables')
             city_feats_df = city_feats_df[city_feats_df['grid_in_location']].reset_index(drop=True)
             city_feats_df = gpd.GeoDataFrame(lat_lon_to_polygon(city_feats_df), geometry='geometry', crs='wgs84')

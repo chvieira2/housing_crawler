@@ -46,10 +46,13 @@ def fix_older_table(df_city, file_name, city,
             year_published_on = 0
 
         # Check if needed
-        if details_searched == details_searched: # means that details_searched is not NaN
+        # if details_searched == details_searched: # means that details_searched is not NaN
+        if details_searched == 'True' or details_searched == True\
+             or details_searched == '1' or details_searched == '1.0'\
+                 or details_searched == 1 or details_searched == 1.0: # searches for everything except True. Used to retry failed searches
             pass
         # Search only from specific date
-        elif int(day_published_on) >= 20 and int(month_published_on) >= 7 and int(year_published_on) >= 2022:
+        elif int(day_published_on) <= 31 and int(day_published_on) >= 20 and int(month_published_on) >= 7 and int(year_published_on) >= 2022:
             ad_url = df_city['url'].iloc[index_row]
 
             # Sleep time to avoid CAPTCH

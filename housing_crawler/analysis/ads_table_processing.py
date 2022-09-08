@@ -5,6 +5,7 @@ from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'. Needed to remove SettingWithCopyWarning warning when assigning new value to dataframe column
+import statsmodels.api as sm
 
 from shapely.geometry import Point
 import geopandas as gpd
@@ -37,6 +38,8 @@ def prepare_data(ads_df):
     ads_df['available_to'] = pd.to_datetime(ads_df['available_to'], format = "%d.%m.%Y")
 
 
+
+
     ## details_searched
     # indicates if details have been searched or not.
     # Over time this is going to become useless but it is relevant as ~50.000 flats were searched before the code for searching deatils have been implemented
@@ -51,6 +54,51 @@ def prepare_data(ads_df):
     ads_df['type_offer_simple'] = ['WG' if ('WG' in offer_type) else offer_type for offer_type in list(ads_df['type_offer_simple'])]
     ads_df['type_offer_simple'] = ['House' if ('Haus' in offer_type) else offer_type for offer_type in list(ads_df['type_offer_simple'])]
     ads_df = ads_df.drop(columns=['type_offer'])
+
+
+
+    ## Cold rent
+    # Filter type of offer
+    wg_df = ads_df.query('type_offer_simple == "WG"').reset_index().drop(columns=['index'])
+
+    singleroom_df = ads_df.query('type_offer_simple == "Single-room flat"').reset_index().drop(columns=['index'])
+
+    flathouse_df = ads_df.query('(type_offer_simple == "Apartment")').reset_index().drop(columns=['index'])
+
+    # Exclude cold rent values equal or above warm rent
+    wg_df['price_euros'] = wg_df.apply(lambda x: max(x['price_euros'],x['price_euros']), axis=1)
+    wg_df['cold_rent_euros'] = wg_df.apply(lambda x: x['cold_rent_euros'] if x['cold_rent_euros'] < x['price_euros'] else np.nan, axis=1)
+
+    singleroom_df['price_euros'] = singleroom_df.apply(lambda x: max(x['price_euros'],x['price_euros']), axis=1)
+    singleroom_df['cold_rent_euros'] = singleroom_df.apply(lambda x: x['cold_rent_euros'] if x['cold_rent_euros'] < x['price_euros'] else np.nan, axis=1)
+
+    flathouse_df['price_euros'] = flathouse_df.apply(lambda x: max(x['price_euros'],x['price_euros']), axis=1)
+    flathouse_df['cold_rent_euros'] = flathouse_df.apply(lambda x: x['cold_rent_euros'] if x['cold_rent_euros'] < x['price_euros'] else np.nan, axis=1)
+
+    # create predictive model for cold rent from warm rent
+    wg_df_foo = wg_df[wg_df['cold_rent_euros'].notna()]
+    wg_df_foo = wg_df_foo[wg_df_foo['price_euros'].notna()]
+    model_wg = sm.OLS(wg_df_foo.cold_rent_euros, wg_df_foo.price_euros).fit()
+
+    singleroom_df_foo = singleroom_df[singleroom_df['cold_rent_euros'].notna()]
+    singleroom_df_foo = singleroom_df_foo[singleroom_df_foo['price_euros'].notna()]
+    model_single = sm.OLS(singleroom_df_foo.cold_rent_euros, singleroom_df_foo.price_euros).fit()
+
+    flathouse_df_foo = flathouse_df[flathouse_df['cold_rent_euros'].notna()]
+    flathouse_df_foo = flathouse_df_foo[flathouse_df_foo['price_euros'].notna()]
+    model_multi = sm.OLS(flathouse_df_foo.cold_rent_euros, flathouse_df_foo.price_euros).fit()
+
+    # Add cold rent predictions
+    wg_df['cold_rent_euros'] = wg_df.apply(lambda x: x['cold_rent_euros'] if x['cold_rent_euros'] == x['cold_rent_euros'] else np.nan if x['price_euros']!=x['price_euros'] else round(model_wg.predict(x['price_euros'])[0],0), axis=1)
+
+    singleroom_df['cold_rent_euros'] = singleroom_df.apply(lambda x: x['cold_rent_euros'] if x['cold_rent_euros'] == x['cold_rent_euros'] else np.nan if x['price_euros']!=x['price_euros'] else round(model_single.predict(x['price_euros'])[0],0), axis=1)
+
+    flathouse_df['cold_rent_euros'] = flathouse_df.apply(lambda x: x['cold_rent_euros'] if x['cold_rent_euros'] == x['cold_rent_euros'] else np.nan if x['price_euros']!=x['price_euros'] else round(model_multi.predict(x['price_euros'])[0],0), axis=1)
+
+    # Concatenate all ads together to re-form ads_df
+    ads_df = pd.concat([wg_df, singleroom_df, flathouse_df], axis=0)
+
+
 
 
 
@@ -83,6 +131,9 @@ def prepare_data(ads_df):
                                 for item in list(ads_df['gender_search'])]
     ads_df.loc[ads_df['details_searched'] == 0, 'gender_searched'] = np.nan
 
+
+
+
     ## Age searched
     # min age range searched
     ads_df['min_age_searched'] = np.nan
@@ -92,6 +143,9 @@ def prepare_data(ads_df):
                                int(re.findall('[0-9]+', item)[0]) if 'ab' in item else 0\
                                for item in list(ads_df['gender_search'])]
     ads_df.loc[ads_df['details_searched'] == 0, 'min_age_searched'] = np.nan
+
+
+
 
     # max age range searched
     ads_df['max_age_searched'] = np.nan
@@ -103,6 +157,8 @@ def prepare_data(ads_df):
     ads_df.loc[ads_df['details_searched'] == 0, 'max_age_searched'] = np.nan
 
     ads_df = ads_df.drop(columns=['gender_search'])
+
+
 
 
     ## energy
@@ -164,6 +220,7 @@ def prepare_data(ads_df):
 def filter_out_bad_entries(ads_df, country = 'Germany',
                           date_max = None, date_min = None, date_format = "%d.%m.%Y"):
 
+    ## Select offers inside a time period
     try:
         # Filter ads in between desired dates. Standard is to use ads from previous 3 months
         if date_max == None or date_max == 'today':
@@ -183,28 +240,97 @@ def filter_out_bad_entries(ads_df, country = 'Germany',
     except ValueError:
         print('Date format was wrong. Please input a date in the format 31.12.2020 (day.month.year), or specify the date format you want to use using the "date_format" option.')
 
+    # Searches before August are not so useful. Remove them here
+    ads_df = ads_df[ads_df['published_on'] >= '2022-08-01']
 
-    ## Filter out unrealistic offers
+
+
+
+
+    ###### Filter out unrealistic offers based on cold_rent_price/size_sqm
+    ## Exclude first based on direct rules
     ads_df['keep'] = False
     ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "WG"\
-                    and x['price_euros'] <= 3000\
-                    and x['price_euros'] > 100\
+                    and x['cold_rent_euros'] <= 3000\
+                    and x['cold_rent_euros'] > 100\
                     and x['size_sqm'] <= 60\
                     and x['size_sqm'] >= 5) else x['keep'], axis=1)
 
     ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "Single-room flat"\
-                    and x['price_euros'] <= 3000\
-                    and x['price_euros'] > 100\
+                    and x['cold_rent_euros'] <= 3000\
+                    and x['cold_rent_euros'] > 100\
                     and x['size_sqm'] <= 100\
                     and x['size_sqm'] >= 10) else x['keep'], axis=1)
 
     ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "Apartment"\
-                    and x['price_euros'] <= 6000\
-                    and x['price_euros'] > 200\
+                    and x['cold_rent_euros'] <= 6000\
+                    and x['cold_rent_euros'] > 200\
                     and x['size_sqm'] <= 300\
                     and x['size_sqm'] >= 25) else x['keep'], axis=1)
+    # Exclude offers not selected in 'keep' column
     ads_df = ads_df[ads_df['keep']].drop(columns=['keep'])
 
+
+    ## Create price/sqm column
+    # for single and multi room flats and houses, the €/m² is directly calculated.
+    ads_df['price_per_sqm_warm'] = round(ads_df['price_euros']/ads_df['size_sqm'],2)
+    ads_df['price_per_sqm_cold'] = round(ads_df['cold_rent_euros']/ads_df['size_sqm'],2)
+    # For WGs, I assume that all rooms in the flat have the same size, so I obtain total size of the flat by multiplying the room size by the number of rooms (plus one (corresponding to the kitchen)).
+    # Effectivelly the assumption about the flat size seems valid as the mean size of the offered room over a large number of ads tends to the mean of all rooms in flats. That is unless there are biases with people generally offering the smallest room in the flat, which could very well be the case.
+    # ads_df["price_per_sqm_cold"] = ads_df.apply(lambda x: x["price_per_sqm_cold"]/(x["capacity"]) if x["type_offer_simple"] == 'WG' else x["price_per_sqm_cold"], axis = 1)
+
+
+    ## Split type of offer
+    wg_df = ads_df.query('type_offer_simple == "WG"').reset_index().drop(columns=['index'])
+
+    singleroom_df = ads_df.query('type_offer_simple == "Single-room flat"').reset_index().drop(columns=['index'])
+
+    flathouse_df = ads_df.query('(type_offer_simple == "Apartment")').reset_index().drop(columns=['index'])
+
+
+    ## Transform prices into log to make it normally distributed
+    wg_df = wg_df[wg_df['price_per_sqm_cold'].notna()]
+    wg_df = wg_df[wg_df['price_per_sqm_cold']>0]
+    wg_df = wg_df[wg_df['price_per_sqm_cold']<np.inf]
+    wg_df['log_price_per_sqm_cold'] = np.log2(wg_df['price_per_sqm_cold'])
+
+    singleroom_df = singleroom_df[singleroom_df['price_per_sqm_cold'].notna()]
+    singleroom_df = singleroom_df[singleroom_df['price_per_sqm_cold']>0]
+    singleroom_df = singleroom_df[singleroom_df['price_per_sqm_cold']<np.inf]
+    singleroom_df['log_price_per_sqm_cold'] = np.log2(singleroom_df['price_per_sqm_cold'])
+
+    flathouse_df = flathouse_df[flathouse_df['price_per_sqm_cold'].notna()]
+    flathouse_df = flathouse_df[flathouse_df['price_per_sqm_cold']>0]
+    flathouse_df = flathouse_df[flathouse_df['price_per_sqm_cold']<np.inf]
+    flathouse_df['log_price_per_sqm_cold'] = np.log2(flathouse_df['price_per_sqm_cold'])
+
+
+    ## Remove outliers identified above X standard deviations
+    X=3
+    mean_wg_df = np.mean(wg_df['log_price_per_sqm_cold'])
+    std_wg_df = np.std(wg_df['log_price_per_sqm_cold'],ddof=1)
+    wg_df = wg_df[wg_df['log_price_per_sqm_cold']<=mean_wg_df+(X*std_wg_df)]
+    wg_df = wg_df[wg_df['log_price_per_sqm_cold']>=mean_wg_df-(X*std_wg_df)]
+
+    mean_singleroom_df = np.mean(singleroom_df['log_price_per_sqm_cold'])
+    std_singleroom_df = np.std(singleroom_df['log_price_per_sqm_cold'],ddof=1)
+    singleroom_df = singleroom_df[singleroom_df['log_price_per_sqm_cold']<=mean_singleroom_df+(X*std_singleroom_df)]
+    singleroom_df = singleroom_df[singleroom_df['log_price_per_sqm_cold']>=mean_singleroom_df-(X*std_singleroom_df)]
+
+    mean_flathouse_df = np.mean(flathouse_df['log_price_per_sqm_cold'])
+    std_flathouse_df = np.std(flathouse_df['log_price_per_sqm_cold'],ddof=1)
+    flathouse_df = flathouse_df[flathouse_df['log_price_per_sqm_cold']<=mean_flathouse_df+(X*std_flathouse_df)]
+    flathouse_df = flathouse_df[flathouse_df['log_price_per_sqm_cold']>=mean_flathouse_df-(X*std_flathouse_df)]
+
+
+    # Concatenate all ads together to re-form ads_df
+    ads_df = pd.concat([wg_df, singleroom_df, flathouse_df], axis=0)
+    ads_df = ads_df.drop(columns=['log_price_per_sqm_cold'])
+
+
+
+
+    ## Exclude offers with addresses outside of Germany
     if country.lower() in ['germany', 'de']:
         # Germany bounding box coordinates from here: https://gist.github.com/graydon/11198540
         ads_df['latitude'] = [lat if (lat>47.3024876979 and lat<54.983104153) else np.nan for lat in list(ads_df['latitude'])]
@@ -400,12 +526,6 @@ def feature_engineering(ads_df):
     ads_df['day_of_week_publication'] = ads_df['published_on'].dt.day_name()
     ads_df['day_of_week_publication'] = [day[0:3] for day in list(ads_df['day_of_week_publication'])]
 
-    ## Create price/sqm column
-    # for single and multi room flats and houses, the €/m² is directly calculated.
-    ads_df['price_per_sqm'] = round(ads_df['price_euros']/ads_df['size_sqm'],2)
-    # For WGs, I assume that all rooms in the flat have the same size, so I obtain total size of the flat by multiplying the room size by the number of rooms (plus one (corresponding to the kitchen)).
-    # Effectivelly the assumption about the flat size seems valid as the mean size of the offered room over a large number of ads tends to the mean of all rooms in flats. That is unless there are biases with people generally offering the smallest room in the flat, which could very well be the case.
-    # ads_df["price_per_sqm"] = ads_df.apply(lambda x: x["price_per_sqm"]/(x["capacity"]) if x["type_offer_simple"] == 'WG' else x["price_per_sqm"], axis = 1)
 
     # Create available time measured in days
     ads_df['days_available'] = ads_df.apply(lambda x: \
@@ -420,7 +540,7 @@ def feature_engineering(ads_df):
     # mid term (>=180 and <270 days)
     # mid-short term (>=90 and <180 days)
     # short term (<90 days)
-    ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: '<90days' if x<90 else '<180days' if x<180 else '<270days' if x<270 else '<365days' if x<365 else '<540days' if x<540 else '>=540days')
+    ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: '90days' if x<90 else '180days' if x<180 else '270days' if x<270 else '365days' if x<365 else '540days' if x<540 else 'plus540days')
 
 
     ## furniture
@@ -605,10 +725,10 @@ def imputing_values(ads_df):
     return ads_df
 
 def get_processed_ads_table(update_table=True):
-    try:
-        if ~update_table:
-            return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
-    except FileNotFoundError:
+    # try:
+    #     if ~update_table:
+    #         return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
+    # except FileNotFoundError:
         all_ads = get_file(file_name='all_encoded.csv', local_file_path='housing_crawler/data')
 
         df_processed = prepare_data(ads_df = all_ads)

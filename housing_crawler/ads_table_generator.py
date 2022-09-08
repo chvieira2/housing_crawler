@@ -46,13 +46,13 @@ def fix_older_table(df_city, file_name, city,
             year_published_on = 0
 
         # Check if needed
-        # if details_searched == details_searched: # means that details_searched is not NaN
-        if details_searched == 'True' or details_searched == True\
-             or details_searched == '1' or details_searched == '1.0'\
-                 or details_searched == 1 or details_searched == 1.0: # searches for everything except True. Used to retry failed searches
+        if details_searched == details_searched: # means that details_searched is not NaN
+        # if details_searched == 'True' or details_searched == True\
+        #      or details_searched == '1' or details_searched == '1.0'\
+        #          or details_searched == 1 or details_searched == 1.0: # searches for everything except True. Used to retry failed searches
             pass
         # Search only from specific date
-        elif int(day_published_on) <= 31 and int(day_published_on) >= 20 and int(month_published_on) >= 7 and int(year_published_on) >= 2022:
+        elif int(day_published_on) >= 1 and int(month_published_on) >= 8 and int(year_published_on) >= 2022:
             ad_url = df_city['url'].iloc[index_row]
 
             # Sleep time to avoid CAPTCH
@@ -169,7 +169,7 @@ def long_search(day_stop_search = '01.01.2023', start_search_from_index = 0):
 
         # Check if between 00 and 8am, and sleep in case it is. This is because most ads are posted during the day and there's seldom need to run overnight.
         hour_of_search = int(time.strftime(f"%H", time.localtime()))
-        while hour_of_search > 8 and hour_of_search < 8:
+        while hour_of_search > 0 and hour_of_search < 8:
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
             print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am.')
             time.sleep(60*60)

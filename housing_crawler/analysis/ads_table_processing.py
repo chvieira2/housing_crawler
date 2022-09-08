@@ -251,20 +251,20 @@ def filter_out_bad_entries(ads_df, country = 'Germany',
     ## Exclude first based on direct rules
     ads_df['keep'] = False
     ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "WG"\
-                    and x['cold_rent_euros'] <= 3000\
-                    and x['cold_rent_euros'] > 100\
+                    and x['cold_rent_euros'] <= 2000\
+                    and x['cold_rent_euros'] >= 50\
                     and x['size_sqm'] <= 60\
                     and x['size_sqm'] >= 5) else x['keep'], axis=1)
 
     ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "Single-room flat"\
-                    and x['cold_rent_euros'] <= 3000\
-                    and x['cold_rent_euros'] > 100\
+                    and x['cold_rent_euros'] <= 2500\
+                    and x['cold_rent_euros'] >= 100\
                     and x['size_sqm'] <= 100\
                     and x['size_sqm'] >= 10) else x['keep'], axis=1)
 
     ads_df['keep'] = ads_df.apply(lambda x: True if (x['type_offer_simple'] == "Apartment"\
                     and x['cold_rent_euros'] <= 6000\
-                    and x['cold_rent_euros'] > 200\
+                    and x['cold_rent_euros'] >= 200\
                     and x['size_sqm'] <= 300\
                     and x['size_sqm'] >= 25) else x['keep'], axis=1)
     # Exclude offers not selected in 'keep' column
@@ -540,7 +540,8 @@ def feature_engineering(ads_df):
     # mid term (>=180 and <270 days)
     # mid-short term (>=90 and <180 days)
     # short term (<90 days)
-    ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: '90days' if x<90 else '180days' if x<180 else '270days' if x<270 else '365days' if x<365 else '540days' if x<540 else 'plus540days')
+    # very short term (<30 days)
+    ads_df['rental_length_term'] = ads_df['days_available'].apply(lambda x: '30days' if x<=30 else '90days' if x<=90 else '180days' if x<=180 else '270days' if x<=270 else '365days' if x<365 else '540days' if x<540 else 'plus540days')
 
 
     ## furniture
@@ -587,6 +588,30 @@ def feature_engineering(ads_df):
     ads_df['age_category_searched'] = ads_df['min_age_searched_encoded'] + '_' + ads_df['max_age_searched_encoded']
 
     ads_df = ads_df.drop(columns=['min_age_searched_encoded', 'max_age_searched_encoded'])
+
+
+    ## room_size_house_fraction
+    ads_df['room_size_house_fraction'] = ads_df['size_sqm']/ads_df['home_total_size']
+    # Room can not occupy more than 70% of the flat/house area
+    ads_df = ads_df.loc[(ads_df['room_size_house_fraction']<=0.7) | ~ads_df['room_size_house_fraction'].notnull()]
+
+
+
+
+    #### Manage identified outliers
+    # max_age_flatmates
+    # There are some ads with really extreme energy usage values (<18 or >80). These were removed for modelling
+    ads_df['max_age_flatmates'] = [np.nan if (value!=value) or value < 18 or value >80 else value for value in list(ads_df['max_age_flatmates'])]
+
+    # public_transport_distance
+    # Remove values of public transport above 30 min
+    ads_df['public_transport_distance'] = [np.nan if (value!=value) or value > 30 else value for value in list(ads_df['public_transport_distance'])]
+
+    # min_age_flatmates
+    # Create a new variable flat_with_kids if the minimum age of flatmates is below 18
+    ads_df['flat_with_kids'] = [1.0 if value < 18 else 0.0 for value in list(ads_df['min_age_flatmates'])]
+    # Limit minimal age of flat mates to 18 and 80 yo
+    ads_df['min_age_flatmates'] = [np.nan if (value!=value) or value < 18 or value >80 else value for value in list(ads_df['min_age_flatmates'])]
 
 
 

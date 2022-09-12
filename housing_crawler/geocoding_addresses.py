@@ -84,7 +84,7 @@ def geocoding_address(address, sleep_time = 900, retry=True):
             city_name = address.split(',')[2].strip().replace('  ', ' ')
             address_without_neigh = ', '.join([street_number, city_name]).strip().replace('  ', ' ')
             print(f'Search did not work with "{address}". Trying with "{address_without_neigh}"')
-            time.sleep(3) # Sleep before trying again to avoid getting stuck
+            time.sleep(10) # Sleep before trying again to avoid getting stuck
             lat,lon = geocoding_address(address=address_without_neigh, retry=False)
         except IndexError:
             print(f'Weird address format: "{address}"')

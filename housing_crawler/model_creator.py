@@ -2,22 +2,17 @@ import numpy as np
 import pandas as pd
 # settings to display all columns
 pd.set_option("display.max_columns", None)
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from statsmodels.stats.outliers_influence import variance_inflation_factor as vif
-from statsmodels.graphics.gofplots import qqplot
-import statsmodels.formula.api as smf
-import statsmodels.api as sm
 
+from sklearn import set_config; set_config(display='diagram')
 from sklearn.impute import SimpleImputer
 # SimpleImputer does not have get_feature_names_out, so we need to add it manually.
 SimpleImputer.get_feature_names_out = (lambda self, names = None: self.feature_names_in_)
-from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, StandardScaler, RobustScaler, PowerTransformer
-from sklearn.pipeline import Pipeline, make_pipeline, make_union
-from sklearn.compose import ColumnTransformer, make_column_transformer, make_column_selector
-from sklearn.model_selection import cross_val_score, cross_validate, learning_curve, train_test_split, RandomizedSearchCV, GridSearchCV
-from sklearn.feature_selection import SelectPercentile, mutual_info_regression
+from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, PowerTransformer
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV
 
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet, SGDRegressor
 from sklearn.inspection import permutation_importance
@@ -25,34 +20,46 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-
-from sklearn import set_config; set_config(display='diagram')
-from sklearn.metrics import mean_squared_error, make_scorer
 import sklearn.metrics as metrics
 
 from xgboost import XGBRegressor
-from sklearn_evaluation import plot
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.constraints import MaxNorm
+from scikeras.wrappers import KerasRegressor
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
 
 import pickle
 
 from housing_crawler.ads_table_processing import get_processed_ads_table
-from housing_crawler.utils import report_best_scores
-
+from housing_crawler.utils import report_best_scores, create_dir
 from config.config import ROOT_DIR
-
-from housing_crawler.string_utils import remove_prefix, simplify_address, standardize_characters, capitalize_city_name, german_characters
+from housing_crawler.params import dict_city_number_wggesucht
+from housing_crawler.string_utils import standardize_characters
 
 
 class ModelGenerator():
     """Implementation of a class that creates the best model for predicting prices"""
 
-    def __init__(self, market_type_filter = 'WG',
-                 target='price_per_sqm_cold', target_log = False,
-                 location='allcities'):
+    def __init__(self, market_type_filter = 'WG', # WG, Single-room flat, Apartment
+                 target='price_per_sqm_cold', # price_per_sqm_cold, price_euros
+                 target_log_transform = False,
+                 city='allcities'):
 
+        # Create directory for saving
+        if city == 'allcities':
+            self.model_path = f'{ROOT_DIR}/housing_crawler/models'
+            self.model_name = f'Pred_pipeline_{market_type_filter}'
+        else:
+            self.model_path = f'{ROOT_DIR}/housing_crawler/models/{standardize_characters(city)}'
+            self.model_name = f'Pred_pipeline_{market_type_filter}_allcities'
+
+        create_dir(path = self.model_path)
 
         self.target = target
-        self.model_name = standardize_characters(location)
         self.columns_to_remove = []
 
         ## Main dataframe
@@ -67,12 +74,17 @@ class ModelGenerator():
         self.df_filtered = self.df_filtered.drop(columns=['details_searched','type_offer_simple'])
         self.df_filtered = self.df_filtered.set_index('id')
 
-        if target_log:
+        if city != 'allcities':
+            self.df_filtered = self.df_filtered[self.df_filtered['city']==city]
+            self.df_filtered = self.df_filtered.drop(columns=['city'])
+
+        if target_log_transform:
             self.df_filtered[self.target] = np.log2(self.df_filtered[self.target])
+            self.model_name = self.model_name + '_targetLogTrans'
 
 
         ## Creates the list of features according to the processing pipeline they will be processed by
-        self.features_OSM = [
+        features_OSM = [
                 'comfort_leisure_spots',
                 'comfort_warehouse',
                 'activities_education',
@@ -106,7 +118,10 @@ class ModelGenerator():
                 'comfort_green_parks', # Has not been blurried?
 #                 'comfort_street_motorway' # Has not been blurried. Empty?
 ]
-        self.features_already_OHE = ['tv_kabel','tv_satellit',
+
+        # features_already_OHE
+        if market_type_filter == 'WG':
+            self.features_already_OHE = ['tv_kabel','tv_satellit',
 
                         'shower_type_badewanne','shower_type_dusche',
 
@@ -125,29 +140,90 @@ class ModelGenerator():
                        'wg_type_lgbtqia','wg_type_senioren','wg_type_inklusive','wg_type_wg_neugruendung',
 
                        'internet_dsl','internet_wlan','internet_flatrate']
-        # Leave no remainder columns. All columns should be included in one category below
+        elif market_type_filter == 'Apartment':
+            self.features_already_OHE = ['tv_kabel','tv_satellit',
 
-        self.cols_PowerTrans_SimpImpMean = ['km_to_centroid',#'size_sqm',
-                                        'min_age_flatmates', 'max_age_flatmates', 'home_total_size',# 'days_available',
-                                        'room_size_house_fraction']
-        self.cols_PowerTrans_SimpImpMedian_MinMaxScaler = self.features_OSM +\
-        ['min_age_searched', 'max_age_searched','public_transport_distance','number_languages']
-        self.cols_PowerTrans_SimpImpMean_RobustScaler = []
+                        'shower_type_badewanne','shower_type_dusche',
 
-        self.cols_SimpImpMean_StandardScaler = []
-        self.cols_SimpImpMean_MinMaxScaler = ['internet_speed','sin_degrees_to_centroid',
-                                         'cos_degrees_to_centroid']
-        self.cols_SimpImpMean_RobustScaler = []
+                       'floor_type_dielen','floor_type_parkett','floor_type_laminat','floor_type_teppich',
+                       'floor_type_fliesen','floor_type_pvc','floor_type_fußbodenheizung',
 
-        self.cols_SimpImpMedian_StandardScaler = []
-        self.cols_SimpImpMedian_MinMaxScaler = ['commercial_landlord','capacity',
+                       'extras_waschmaschine','extras_spuelmaschine','extras_terrasse','extras_balkon',
+                       'extras_garten','extras_gartenmitbenutzung','extras_keller','extras_aufzug',
+                       'extras_haustiere','extras_fahrradkeller','extras_dachboden',
+
+                       'wg_possible',
+
+                       'internet_dsl','internet_wlan','internet_flatrate']
+        else:
+            self.features_already_OHE = ['tv_kabel','tv_satellit',
+
+                        'shower_type_badewanne','shower_type_dusche',
+
+                       'floor_type_dielen','floor_type_parkett','floor_type_laminat','floor_type_teppich',
+                       'floor_type_fliesen','floor_type_pvc','floor_type_fußbodenheizung',
+
+                       'extras_waschmaschine','extras_spuelmaschine','extras_terrasse','extras_balkon',
+                       'extras_garten','extras_gartenmitbenutzung','extras_keller','extras_aufzug',
+                       'extras_haustiere','extras_fahrradkeller','extras_dachboden']
+
+
+        # cols_PowerTrans_SimpImpMean
+        if market_type_filter == 'WG':
+            self.cols_PowerTrans_SimpImpMean = ['km_to_centroid',#'size_sqm',
+                                        'min_age_flatmates', 'max_age_flatmates', 'home_total_size', 'days_available',
+                                        'room_size_house_fraction','energy_usage']
+        else:
+            self.cols_PowerTrans_SimpImpMean = ['km_to_centroid', 'days_available'
+                                        'construction_year','energy_usage']
+
+        # cols_PowerTrans_SimpImpMedian_MinMaxScaler
+        if market_type_filter == 'WG':
+            self.cols_PowerTrans_SimpImpMedian_MinMaxScaler = features_OSM +\
+            ['capacity', 'min_age_searched', 'max_age_searched','public_transport_distance','number_languages', 'energy_efficiency_class']
+        else:
+            self.cols_PowerTrans_SimpImpMedian_MinMaxScaler = features_OSM +\
+            ['public_transport_distance', 'energy_efficiency_class']
+
+
+        # cols_SimpImpMean_MinMaxScaler
+        if market_type_filter == 'WG':
+            self.cols_SimpImpMean_MinMaxScaler = ['internet_speed','sin_degrees_to_centroid','cos_degrees_to_centroid']
+        else:
+            self.cols_SimpImpMean_MinMaxScaler = ['sin_degrees_to_centroid','cos_degrees_to_centroid']
+
+
+        # cols_SimpImpMedian_MinMaxScaler
+        if market_type_filter == 'WG':
+            self.cols_SimpImpMedian_MinMaxScaler = ['commercial_landlord',
                                         'male_flatmates', 'female_flatmates', 'diverse_flatmates','flat_with_kids',
                                         'schufa_needed','smoking_numerical', 'building_floor',
+                                        'furniture_numerical'] + self.features_already_OHE
+        elif market_type_filter == 'Apartment':
+            self.cols_SimpImpMedian_MinMaxScaler = ['commercial_landlord',
+                                        'schufa_needed',
+                                        'building_floor', 'toilet',
+                                        'furniture_numerical', 'kitchen_numerical', 'available_rooms'] + self.features_already_OHE
+        else:
+            self.cols_SimpImpMedian_MinMaxScaler = ['commercial_landlord',
+                                        'schufa_needed',
+                                        'building_floor', 'toilet',
                                         'furniture_numerical', 'kitchen_numerical'] + self.features_already_OHE
-        self.cols_SimpImpMedian_RobustScaler = []
+
+
+        # cols_PowerTrans_SimpImpMedian_MinMaxScaler
         self.cols_SimpImpConst0_PowerTrans_MinMaxScaler = ['transfer_costs_euros']
-        self.cols_SimpImpConstNoAns_OHE = ['city','rental_length_term','gender_searched',
-                                      'building_type','heating', 'parking']
+
+
+        # cols_PowerTrans_SimpImpMedian_MinMaxScaler
+        if market_type_filter == 'WG':
+            self.cols_SimpImpConstNoAns_OHE = ['rental_length_term','gender_searched','building_type','heating', 'parking']
+        else:
+            self.cols_SimpImpConstNoAns_OHE = ['rental_length_term','building_type','heating', 'parking']
+
+        if city == 'allcities':
+            self.cols_SimpImpConstNoAns_OHE += ['city']
+
 
 
         # Final preprocessing pipeline
@@ -434,12 +510,8 @@ class ModelGenerator():
         print('preprocessor_analysed pipeline has been created.')
         return self.preprocessor_analysed
 
-    def hyperparametrization(self,X,y, model = Ridge(), scoring='neg_root_mean_squared_error',
-                             search_space = {
-            'alpha': [1,10,100,1000],
-            'tol': [0, 0.001,0.1,1],
-            'solver': ['lsqr','auto']# auto, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga', 'lbfgs']
-        }):
+    def hyperparametrization(self,X,y, model,
+                             search_space, scoring='neg_root_mean_squared_error'):
 
         # Instanciate GridSearchCV
         rsearch = GridSearchCV(
@@ -451,7 +523,64 @@ class ModelGenerator():
         report_best_scores(rsearch.cv_results_, 1)
         return rsearch
 
-    def find_best_model(self):
+    def create_NN_model(nbr_features,
+                        n_neurons_layer1 = 32,
+                        n_neurons_layer2 = 32,
+                        activation_layer1 = 'relu',
+                        activation_layer2 = 'relu',
+                        learning_rate=0.01, beta_1=0.9, beta_2=0.999,
+                        loss='mse',
+                        metrics=['mae','msle'],
+                        patience=20,
+                        batch_size=16, epochs=100,
+                        init_mode='uniform',
+                        dropout_rate=0.2,
+                        weight_constraint=3.0):
+
+
+        #### 1. ARCHITECTURE
+        model = Sequential()
+
+        model.add(Dense(n_neurons_layer1, input_shape=(nbr_features,), activation=activation_layer1))
+        model.add(Dropout(dropout_rate))   # Dropout helps protect the model from memorizing or "overfitting" the training data
+        model.add(Dense(n_neurons_layer2, activation=activation_layer2))
+        model.add(Dropout(dropout_rate))
+        model.add(Dense(1, activation='linear', kernel_initializer=init_mode))
+
+        #### 2. COMPILATION
+        adam_opt = Adam(learning_rate=learning_rate, beta_1=beta_1, beta_2=beta_2)
+        model.compile(loss=loss,
+                optimizer=adam_opt,
+                metrics=metrics)
+
+        #### 3. FIT
+        es = EarlyStopping(patience=patience, restore_best_weights=True)
+
+        # Don't set the fit method so the model can be used in GridSearchCV
+    #     history = model.fit(X_train, y_train,
+    #                         validation_split=0.3,
+    #                         shuffle=True,
+    #                         batch_size=batch_size, # When batch size is too small --> no generalization
+    #                         epochs=epochs,    # When batch size is too large --> slow computations
+    #                         callbacks=[es],
+    #                         verbose=0)
+
+    #     plot_history(history)
+
+        return model
+
+    def find_best_model(self, models_to_test = [
+                                                # 'NeuralNetwork',
+                                                # 'Ridge',
+                                                # 'Lasso',
+                                                # 'ElasticNet',
+                                                # 'SGDRegressor',
+                                                # 'KNeighborsRegressor',
+                                                # 'SVR',
+                                                # 'DecisionTreeRegressor',
+                                                # 'RandomForestRegressor',
+                                                # 'GradientBoostingRegressor',
+                                                'XGBRegressor']):
         """
         This function will find the best hyper parameter for several possible models.
         """
@@ -466,33 +595,79 @@ class ModelGenerator():
 
 
         ## Hyperparametrazing multiple models
+        models_parametrized = []
+        # NeuralNetwork
+        if 'NeuralNetwork' in models_to_test:
+            # Instanciate model
+            model = KerasRegressor(model=self.create_NN_model(nbr_features=len(X.columns)), verbose=0)
+
+            # fix random seed for reproducibility
+            tf.random.set_seed(42)
+
+            # Hyperparameter search space
+            search_space = {
+                'epochs': [150],#[50, 100, 150],
+                'batch_size': [32],#[16,32,64],
+                'model__n_neurons_layer1': [16,32,64],
+                'model__n_neurons_layer2': [16,32,64],
+                'model__activation_layer1': ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
+                'model__activation_layer2': ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
+                'model__dropout_rate': [0.2],#[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                'model__weight_constraint': [3.0],#[1.0, 2.0, 3.0, 4.0, 5.0],
+            #     'optimizer__learning_rate': [0.01],
+            #     'optimizer__beta_1': [0.9],
+            #     'optimizer__beta_2': [0.999],
+            #     'loss': ['mse'],
+            #     'validation_split': [0.3],
+            #     'shuffle':[True],
+                'model__init_mode': ['normal'],#['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+            #     'callbacks__patience': [20]
+            }
+
+            print('Finding best parameters for NeuralNetwork model...')
+            NeuralNetwork_rsearch = GridSearchCV(
+                                        model, search_space,
+                                        cv=5, verbose=0)
+            models_parametrized.append(NeuralNetwork_rsearch)
+
         # Ridge
-        Ridge_rsearch = self.hyperparametrization(X,y, model = Ridge(),
+        if 'Ridge' in models_to_test:
+            print('Finding best parameters for Ridge model...')
+            Ridge_rsearch = self.hyperparametrization(X,y, model = Ridge(),
                                 search_space = {
                                                 'alpha': [1,10,100,1000],
                                                 'tol': [0, 0.001,0.1,1],
                                                 'solver': ['lsqr','auto']# auto, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga', 'lbfgs']
                                             })
+            models_parametrized.append(Ridge_rsearch)
 
         # Lasso
-        Lasso_rsearch = self.hyperparametrization(X,y, model = Lasso(),
+        if 'Lasso' in models_to_test:
+            print('Finding best parameters for Lasso model...')
+            Lasso_rsearch = self.hyperparametrization(X,y, model = Lasso(),
                                 search_space = {
     'alpha': [0.001,0.01,0.1,1],
     'tol': [0.1,1,10,100],
     'selection': ['cyclic', 'random']
 })
+            models_parametrized.append(Lasso_rsearch)
 
         # ElasticNet
-        ElasticNet_rsearch = self.hyperparametrization(X,y, model = ElasticNet(),
+        if 'ElasticNet' in models_to_test:
+            print('Finding best parameters for ElasticNet model...')
+            ElasticNet_rsearch = self.hyperparametrization(X,y, model = ElasticNet(),
                                 search_space = {
     'alpha': [0.001,0.01,0.1,1],
     'tol': [1,10,100],
     'l1_ratio': [0,0.3,0.6,1],
     'selection': ['cyclic', 'random']
 })
+            models_parametrized.append(ElasticNet_rsearch)
 
         # SGDRegressor
-        SGDRegressor_rsearch = self.hyperparametrization(X,y, model = SGDRegressor(),
+        if 'SGDRegressor' in models_to_test:
+            print('Finding best parameters for SGDRegressor model...')
+            SGDRegressor_rsearch = self.hyperparametrization(X,y, model = SGDRegressor(),
                                 search_space = {
     'loss':['squared_error','epsilon_insensitive', 'squared_epsilon_insensitive'],#, 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'],
     'alpha': [0.0001, 0.001,0.01],
@@ -505,18 +680,24 @@ class ModelGenerator():
     'power_t': [0.25],
     'early_stopping': [True]
 })
+            models_parametrized.append(SGDRegressor_rsearch)
 
         # KNeighborsRegressor
-        KNeighborsRegressor_rsearch = self.hyperparametrization(X,y, model = KNeighborsRegressor(),
+        if 'KNeighborsRegressor' in models_to_test:
+            print('Finding best parameters for KNeighborsRegressor model...')
+            KNeighborsRegressor_rsearch = self.hyperparametrization(X,y, model = KNeighborsRegressor(),
                                 search_space = {
     'n_neighbors': range(30,50,1),
     'weights': ['distance'],#['uniform', 'distance'],
     'algorithm': ['brute'],#['ball_tree', 'kd_tree', 'brute'],
     'leaf_size': [2]#range(2,15,1)
 })
+            models_parametrized.append(KNeighborsRegressor_rsearch)
 
         # SVR
-        SVR_rsearch = self.hyperparametrization(X,y, model = SVR(),
+        if 'SVR' in models_to_test:
+            print('Finding best parameters for SVR model...')
+            SVR_rsearch = self.hyperparametrization(X,y, model = SVR(),
                                 search_space = {
     'kernel': ['poly'],#['linear','poly','sigmoid', 'rbf'],
     'degree': range(2,5,1),
@@ -526,9 +707,12 @@ class ModelGenerator():
     'coef0': [0],#[0,0.1,1],
     'epsilon': [1],#[0.1,1,10]
 })
+            models_parametrized.append(SVR_rsearch)
 
         # DecisionTreeRegressor
-        DecisionTreeRegressor_rsearch = self.hyperparametrization(X,y, model = DecisionTreeRegressor(),
+        if 'DecisionTreeRegressor' in models_to_test:
+            print('Finding best parameters for DecisionTreeRegressor model...')
+            DecisionTreeRegressor_rsearch = self.hyperparametrization(X,y, model = DecisionTreeRegressor(),
                                 search_space = {
     'criterion': ['squared_error'],#['squared_error', 'friedman_mse', 'absolute_error', 'poisson'],
     'splitter': ['best','random'],
@@ -541,9 +725,12 @@ class ModelGenerator():
     'min_impurity_decrease': [0.3],#[0.2,0.3,0.4,0.5],
     'ccp_alpha':[0.0],#[0.2,0.25,0.3,0.35],
 })
+            models_parametrized.append(DecisionTreeRegressor_rsearch)
 
         # RandomForestRegressor
-        RandomForestRegressor_rsearch = self.hyperparametrization(X,y, model = RandomForestRegressor(),
+        if 'RandomForestRegressor' in models_to_test:
+            print('Finding best parameters for RandomForestRegressor model...')
+            RandomForestRegressor_rsearch = self.hyperparametrization(X,y, model = RandomForestRegressor(),
                                 search_space = {
     'n_jobs':[-1],
     'n_estimators': [100],#[100,200,500,1000],
@@ -558,9 +745,12 @@ class ModelGenerator():
     'bootstrap':[False],#[True, False]
     'ccp_alpha':[0.0],
 })
+            models_parametrized.append(RandomForestRegressor_rsearch)
 
         # GradientBoostingRegressor
-        GradientBoostingRegressor_rsearch = self.hyperparametrization(X,y, model = GradientBoostingRegressor(),
+        if 'GradientBoostingRegressor' in models_to_test:
+            print('Finding best parameters for GradientBoostingRegressor model...')
+            GradientBoostingRegressor_rsearch = self.hyperparametrization(X,y, model = GradientBoostingRegressor(),
                                 search_space = {
     'learning_rate': [0.1],#[0.001,0.01,0.1],
     'n_estimators': [100],#[100,200,500,1000],
@@ -576,9 +766,12 @@ class ModelGenerator():
     'max_leaf_nodes': [4],#range(3,5,1),
     'ccp_alpha':[0.3],#[0.25,0.3,0.35],
 })
+            models_parametrized.append(GradientBoostingRegressor_rsearch)
 
         # XGBRegressor
-        XGBRegressor_rsearch = self.hyperparametrization(X,y, model = XGBRegressor(),
+        if 'XGBRegressor' in models_to_test:
+            print('Finding best parameters for XGBRegressor model...')
+            XGBRegressor_rsearch = self.hyperparametrization(X,y, model = XGBRegressor(),
                                 search_space = {
     "colsample_bytree": [0.6,0.7,0.8],
 #     "gamma": [0.3,0.4,0.5],
@@ -587,35 +780,20 @@ class ModelGenerator():
     "n_estimators": range(100,150,10), # default 100
     "subsample": [0.2],#[0.1,0.2,0.3]
 })
-
-
+            models_parametrized.append(XGBRegressor_rsearch)
 
         ## Compare models side by side
         # train_test_split
         X_train, X_test, y_train, y_test = train_test_split(X, y,
                                                             test_size = 0.1,
                                                             random_state = 0)
-
         scores = pd.DataFrame(columns=['model','r2','explained_variance','MSE',#'MSLE',
                                     'MAE','RMSE'])
 
-        for mod in [LinearRegression(n_jobs=-1),
-                    Ridge_rsearch.best_estimator_,
-                    Lasso_rsearch.best_estimator_,
-                    ElasticNet_rsearch.best_estimator_,
-                    SGDRegressor_rsearch.best_estimator_,
-                    KNeighborsRegressor_rsearch.best_estimator_,
-                    SVR_rsearch.best_estimator_,
-                    DecisionTreeRegressor_rsearch.best_estimator_,
-                    RandomForestRegressor_rsearch.best_estimator_,
-                    GradientBoostingRegressor_rsearch.best_estimator_,
-                    XGBRegressor_rsearch.best_estimator_,
-                    ]:
-
+        print('Finding best model...')
+        for mod in [LinearRegression(n_jobs=-1)] + models_parametrized:
             mod.fit(X_train,y_train)
-
             mod_name = type(mod).__name__
-
             y_pred = mod.predict(X_test)
 
             explained_variance=metrics.explained_variance_score(y_test, y_pred)
@@ -642,13 +820,39 @@ class ModelGenerator():
 
         print(scores.sort_values(by='r2', ascending=False))
 
+    def save_best_model(self):
+        """
+        This function will create and save the full, fitted pipeline. The full pipeline receives a dataframe directly from get_processed_ads_table() (that is optionally filtered) and returns the best predictive model.
+        This best model is also saved locally.
+        """
+        if self.preprocessor_analysed is None:
+            self.define_preprocessing_after_analysis()
+
+        if self.model is None:
+            self.find_best_model()
+
+        # Create the prediction pipeline
+        self.pred_pipeline = make_pipeline(self.preprocessor_analysed,self.model)
+
+        # Fit model on the full dataset
+        self.pred_pipeline = self.pred_pipeline.fit(self.df_filtered.drop(columns=self.target), self.df_filtered[self.target])
+
+        # Export Pipeline as pickle file
+        print(f'Saving predictive pipeline {self.model_path}/{self.model_name}')
+        with open(f"{self.model_path}/{self.model_name}.pkl", "wb") as file:
+            pickle.dump(self.pred_pipeline, file)
+
+        # Load Pipeline from pickle file
+        # pred_pipeline = pickle.load(open("pred_pipeline_allcities.pkl","rb"))
+
+        return self.pred_pipeline
+
+
+
 if __name__ == "__main__":
-    ModelGenerator().find_best_model()
-    # CrawlWgGesucht().crawl_all_pages('Berlin', 1)
-
-    # df = get_file(file_name=f'berlin_ads.csv',
-    #                         local_file_path=f'housing_crawler/data/berlin/Ads')
-
-    # CrawlWgGesucht().save_df(df, 'berlin')
-
-    # print(crawl_ind_ad_page(url = 'https://www.wg-gesucht.de/wohnungen-in-Berlin-Reinickendorf.9530155.html'))
+    models_to_create = ['allcities'] + list(dict_city_number_wggesucht.keys())
+    for city in models_to_create:
+        for offer_type in ['WG', 'Single-room flat', 'Apartment']: #WG, Single-room flat, Apartment
+            ModelGenerator(market_type_filter = offer_type,
+                 target='price_per_sqm_cold', target_log_transform = False,
+                 city=city).save_best_model()

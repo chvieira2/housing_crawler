@@ -49,6 +49,10 @@ class ModelGenerator():
                  target_log_transform = False,
                  city='allcities'):
 
+        print('\n\n\n')
+        print(f'Starting search for {market_type_filter} in {city}')
+        print('\n\n\n')
+
         # Create directory for saving
         if city == 'allcities':
             self.model_path = f'{ROOT_DIR}/housing_crawler/models'
@@ -174,7 +178,7 @@ class ModelGenerator():
                                         'min_age_flatmates', 'max_age_flatmates', 'home_total_size', 'days_available',
                                         'room_size_house_fraction','energy_usage']
         else:
-            self.cols_PowerTrans_SimpImpMean = ['km_to_centroid', 'days_available'
+            self.cols_PowerTrans_SimpImpMean = ['km_to_centroid', 'days_available',
                                         'construction_year','energy_usage']
 
         # cols_PowerTrans_SimpImpMedian_MinMaxScaler
@@ -291,6 +295,9 @@ class ModelGenerator():
         Exclude all columns (except cities) with >99% of the same value as it contains very little information. This was originally designed to remove OHE-generated columns with very little information, but I later decided to not exclude OHE-generated columns. See https://inmachineswetrust.com/posts/drop-first-columns/
         Columns for exclusion are added to self.columns_to_remove and the function returns the minimized dataframe
         """
+        print('=========================')
+        print('Minimizing features...')
+        print('\n')
         # Define columns to be tested. Don't test the target, commercial_landlord and 'city'
         cols_to_search = [col for col in df_minimal.columns if col not in [self.target]]
 
@@ -315,7 +322,9 @@ class ModelGenerator():
         This function implements a automatized Variance Inflation Factor (VIF) analysis and identifies columns with high colinearity.
         Columns for exclusion are added to self.columns_to_remove and the function returns the reduced dataframe without features with VIF score above VIF_threshold.
         """
-
+        print('=========================')
+        print('Colinearity (VIF) analysis...')
+        print('\n')
         remove = True
         while remove:
 
@@ -367,6 +376,10 @@ class ModelGenerator():
         This function performs a permutation importance analysis using a Ridge() model to identify columns with highest impact on variance. Columns with impact lower than importance_threshold are removed to decrease dimentionality of the data.
         Columns for exclusion are added to self.columns_to_remove and the function returns the reduced dataframe without features with low permutation importance.
         """
+        print('=========================')
+        print('Permutation feature importance analysis...')
+        print('\n')
+
         ## Calculate permutation scores
         X = df_permuted
         y = self.df_filtered[self.target]
@@ -439,12 +452,13 @@ class ModelGenerator():
 
         ## Apply minimization
         df_minimal = self.minimize_features(df_processed)
-
+        print('Finished Minimizing features')
         ## Apply colinearity VIF analyis
         df_VIF = self.VIF_colinearity_analysis(df_minimal)
-
+        print('Finished colinearity analysis')
         ## Apply permutation importance analysis
         df_permuted = self.feature_importance_permutation(df_VIF)
+        print('Finished permutation importance analysis')
 
         # Return the analysed dataframe
         return df_permuted
@@ -458,7 +472,7 @@ class ModelGenerator():
         self.identify_num_cols_to_remove()
 
         print('Creating final preprocessing backbone. Columns to exclude from modeling:')
-        print(', '.join(self.columns_to_remove))
+        print(', '.join(sorted(self.columns_to_remove)))
         print('\n')
 
         ## Build the imputter/scaler pairs
@@ -528,14 +542,13 @@ class ModelGenerator():
                         n_neurons_layer2 = 32,
                         activation_layer1 = 'relu',
                         activation_layer2 = 'relu',
-                        learning_rate=0.01, beta_1=0.9, beta_2=0.999,
-                        loss='mse',
-                        metrics=['mae','msle'],
-                        patience=20,
-                        batch_size=16, epochs=100,
-                        init_mode='uniform',
-                        dropout_rate=0.2,
-                        weight_constraint=3.0):
+                        learning_rate = 0.01, beta_1 = 0.9, beta_2 = 0.999,
+                        loss = 'mse',
+                        metrics = ['mae','msle'],
+                        patience = 20,
+                        init_mode = 'uniform',
+                        dropout_rate = 0.2,
+                        weight_constraint = 3.0):
 
 
         #### 1. ARCHITECTURE
@@ -571,16 +584,17 @@ class ModelGenerator():
 
     def find_best_model(self, models_to_test = [
                                                 # 'NeuralNetwork',
-                                                # 'Ridge',
-                                                # 'Lasso',
-                                                # 'ElasticNet',
-                                                # 'SGDRegressor',
-                                                # 'KNeighborsRegressor',
-                                                # 'SVR',
+                                                'Ridge',
+                                                'Lasso',
+                                                'ElasticNet',
+                                                'SGDRegressor',
+                                                'KNeighborsRegressor',
+                                                'SVR',
                                                 # 'DecisionTreeRegressor',
-                                                # 'RandomForestRegressor',
+                                                'RandomForestRegressor',
                                                 # 'GradientBoostingRegressor',
-                                                'XGBRegressor']):
+                                                'XGBRegressor'
+                                                ]):
         """
         This function will find the best hyper parameter for several possible models.
         """
@@ -599,19 +613,18 @@ class ModelGenerator():
         # NeuralNetwork
         if 'NeuralNetwork' in models_to_test:
             # Instanciate model
-            model = KerasRegressor(model=self.create_NN_model(nbr_features=len(X.columns)), verbose=0)
+            model = KerasRegressor(model=self.create_NN_model(nbr_features= len(X.columns)), verbose=0)
 
             # fix random seed for reproducibility
             tf.random.set_seed(42)
-
             # Hyperparameter search space
             search_space = {
-                'epochs': [150],#[50, 100, 150],
+                'epochs': [50],#[50, 100, 150],
                 'batch_size': [32],#[16,32,64],
-                'model__n_neurons_layer1': [16,32,64],
-                'model__n_neurons_layer2': [16,32,64],
-                'model__activation_layer1': ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
-                'model__activation_layer2': ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
+                'model__n_neurons_layer1': [32],#[16,32,64],
+                'model__n_neurons_layer2': [32],#[16,32,64],
+                'model__activation_layer1': ['relu'],#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
+                'model__activation_layer2': ['relu'],#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
                 'model__dropout_rate': [0.2],#[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
                 'model__weight_constraint': [3.0],#[1.0, 2.0, 3.0, 4.0, 5.0],
             #     'optimizer__learning_rate': [0.01],
@@ -635,8 +648,8 @@ class ModelGenerator():
             print('Finding best parameters for Ridge model...')
             Ridge_rsearch = self.hyperparametrization(X,y, model = Ridge(),
                                 search_space = {
-                                                'alpha': [1,10,100,1000],
-                                                'tol': [0, 0.001,0.1,1],
+                                                'alpha': [0.001,0.01,0.1,1,10,100],
+                                                'tol': [0.001,0.01,0.1,1,10,100],
                                                 'solver': ['lsqr','auto']# auto, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga', 'lbfgs']
                                             })
             models_parametrized.append(Ridge_rsearch)
@@ -646,10 +659,10 @@ class ModelGenerator():
             print('Finding best parameters for Lasso model...')
             Lasso_rsearch = self.hyperparametrization(X,y, model = Lasso(),
                                 search_space = {
-    'alpha': [0.001,0.01,0.1,1],
-    'tol': [0.1,1,10,100],
-    'selection': ['cyclic', 'random']
-})
+                                                'alpha': [0.001,0.01,0.1,1,10,100],
+                                                'tol': [0.001,0.01,0.1,1,10,100],
+                                                'selection': ['cyclic', 'random']
+                                                })
             models_parametrized.append(Lasso_rsearch)
 
         # ElasticNet
@@ -657,11 +670,11 @@ class ModelGenerator():
             print('Finding best parameters for ElasticNet model...')
             ElasticNet_rsearch = self.hyperparametrization(X,y, model = ElasticNet(),
                                 search_space = {
-    'alpha': [0.001,0.01,0.1,1],
-    'tol': [1,10,100],
-    'l1_ratio': [0,0.3,0.6,1],
-    'selection': ['cyclic', 'random']
-})
+                                                'alpha': [0.001,0.01,0.1,1,10,100],
+                                                'tol': [0.001],#[0.001,0.01,0.1,1,10,100],
+                                                'l1_ratio': [0,0.3,0.6,1],
+                                                'selection': ['cyclic', 'random']
+                                                })
             models_parametrized.append(ElasticNet_rsearch)
 
         # SGDRegressor
@@ -671,15 +684,15 @@ class ModelGenerator():
                                 search_space = {
     'loss':['squared_error','epsilon_insensitive', 'squared_epsilon_insensitive'],#, 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'],
     'alpha': [0.0001, 0.001,0.01],
-    'penalty': ['elasticnet'],#['l1','l2','elasticnet'],
-    'tol': [10],#[1,10,100],
-    'l1_ratio': [1],#[0,0.3,0.6,1],
-    'epsilon': [1,10,100],
+    'penalty': ['l1','l2','elasticnet'],
+    'tol': [1,10,100],
+    'l1_ratio': [0,0.3,0.6,1],
+    'epsilon': [0.1,1,10],
     'learning_rate': ['invscaling'],#,'constant','optimal','adaptive'],
     'eta0': [0.001,0.01,0.1],
     'power_t': [0.25],
     'early_stopping': [True]
-})
+    })
             models_parametrized.append(SGDRegressor_rsearch)
 
         # KNeighborsRegressor
@@ -687,10 +700,10 @@ class ModelGenerator():
             print('Finding best parameters for KNeighborsRegressor model...')
             KNeighborsRegressor_rsearch = self.hyperparametrization(X,y, model = KNeighborsRegressor(),
                                 search_space = {
-    'n_neighbors': range(30,50,1),
-    'weights': ['distance'],#['uniform', 'distance'],
-    'algorithm': ['brute'],#['ball_tree', 'kd_tree', 'brute'],
-    'leaf_size': [2]#range(2,15,1)
+    'n_neighbors': range(10,50,2),
+    'weights': ['uniform', 'distance'],
+    'algorithm': ['ball_tree', 'kd_tree', 'brute'],
+    'leaf_size': range(2,15,1)
 })
             models_parametrized.append(KNeighborsRegressor_rsearch)
 
@@ -699,13 +712,13 @@ class ModelGenerator():
             print('Finding best parameters for SVR model...')
             SVR_rsearch = self.hyperparametrization(X,y, model = SVR(),
                                 search_space = {
-    'kernel': ['poly'],#['linear','poly','sigmoid', 'rbf'],
+    'kernel': ['poly','sigmoid', 'rbf'],#['linear','poly','sigmoid', 'rbf'],
     'degree': range(2,5,1),
     'C': [10,100,1000],
-    'tol': [0.001],#[0.001,0.01,0.1],
+    'tol': [0.001,0.01,0.1],
     'gamma': ['auto'],#[0,0.1,1,'scale','auto'],
-    'coef0': [0],#[0,0.1,1],
-    'epsilon': [1],#[0.1,1,10]
+    'coef0': [0,0.1,1],
+    'epsilon': [0.1,1,10]
 })
             models_parametrized.append(SVR_rsearch)
 
@@ -736,13 +749,13 @@ class ModelGenerator():
     'n_estimators': [100],#[100,200,500,1000],
     'criterion': ['squared_error'],#['squared_error', 'friedman_mse', 'absolute_error', 'poisson'],
     'max_depth': range(5,20,5),
-    'min_samples_split': [4],#range(3,6,1),
-    'min_samples_leaf': [3],#range(2,4,1),
-    'min_weight_fraction_leaf': [0.0],#[0.0,0.1,0.2],
-    'max_features': [1.0],#[0.7,0.8,0.9,1.0],
-    'max_leaf_nodes': [4],#range(3,5,1), #int, default=None
-    'min_impurity_decrease': [0.4],#[0.3,0.4,0.5],
-    'bootstrap':[False],#[True, False]
+    'min_samples_split': range(2,22,5),
+    'min_samples_leaf': range(2,10,2),
+    'min_weight_fraction_leaf': [0.0,0.1,0.2],
+    'max_features': [0.7,0.8,0.9,1.0],
+    'max_leaf_nodes': range(3,8,2), #int, default=None
+    'min_impurity_decrease': [0.3,0.4,0.5],
+    'bootstrap': [True, False],
     'ccp_alpha':[0.0],
 })
             models_parametrized.append(RandomForestRegressor_rsearch)
@@ -776,7 +789,7 @@ class ModelGenerator():
     "colsample_bytree": [0.6,0.7,0.8],
 #     "gamma": [0.3,0.4,0.5],
     "learning_rate": [0.1],#[0.1,0.01,0.001], # default 0.1
-    "max_depth": range(2,4,1), # default 3
+    "max_depth": range(2,5,1), # default 3
     "n_estimators": range(100,150,10), # default 100
     "subsample": [0.2],#[0.1,0.2,0.3]
 })
@@ -850,9 +863,15 @@ class ModelGenerator():
 
 
 if __name__ == "__main__":
-    models_to_create = ['allcities'] + list(dict_city_number_wggesucht.keys())
+    didnt_work = []
+    models_to_create = list(dict_city_number_wggesucht.keys()) + ['allcities']
     for city in models_to_create:
-        for offer_type in ['WG', 'Single-room flat', 'Apartment']: #WG, Single-room flat, Apartment
-            ModelGenerator(market_type_filter = offer_type,
-                 target='price_per_sqm_cold', target_log_transform = False,
-                 city=city).save_best_model()
+        for offer_type in ['WG', 'Single-room flat', 'Apartment']: #'WG', 'Single-room flat', 'Apartment'
+            try:
+                ModelGenerator(market_type_filter = offer_type,
+                    target='price_per_sqm_cold', target_log_transform = False,
+                    city=city).save_best_model()
+            except:
+                didnt_work.append(city+'+'+offer_type)
+
+    print(didnt_work)

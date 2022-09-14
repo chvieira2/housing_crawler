@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import pandas as pd
 # settings to display all columns
@@ -12,7 +13,7 @@ SimpleImputer.get_feature_names_out = (lambda self, names = None: self.feature_n
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, PowerTransformer
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV
+from sklearn.model_selection import cross_val_score, train_test_split, GridSearchCV, KFold
 
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet, SGDRegressor
 from sklearn.inspection import permutation_importance
@@ -56,10 +57,10 @@ class ModelGenerator():
         # Create directory for saving
         if city == 'allcities':
             self.model_path = f'{ROOT_DIR}/housing_crawler/models'
-            self.model_name = f'Pred_pipeline_{market_type_filter}'
+            self.model_name = f'Pred_pipeline_{market_type_filter}_allcities'
         else:
             self.model_path = f'{ROOT_DIR}/housing_crawler/models/{standardize_characters(city)}'
-            self.model_name = f'Pred_pipeline_{market_type_filter}_allcities'
+            self.model_name = f'Pred_pipeline_{market_type_filter}'
 
         create_dir(path = self.model_path)
 
@@ -533,31 +534,40 @@ class ModelGenerator():
             n_jobs=-1, scoring=scoring, cv=5, verbose=0)
 
         rsearch.fit(X,y)
-        print(type(model).__name__)
         report_best_scores(rsearch.cv_results_, 1)
-        return rsearch
+        return rsearch, type(model).__name__
 
-    def create_NN_model(nbr_features,
+    def create_NN_model(self,
+                        X_train, y_train,
+                        fitting = False,
                         n_neurons_layer1 = 32,
-                        n_neurons_layer2 = 32,
-                        activation_layer1 = 'relu',
-                        activation_layer2 = 'relu',
-                        learning_rate = 0.01, beta_1 = 0.9, beta_2 = 0.999,
-                        loss = 'mse',
-                        metrics = ['mae','msle'],
-                        patience = 20,
-                        init_mode = 'uniform',
-                        dropout_rate = 0.2,
-                        weight_constraint = 3.0):
+                        n_neurons_layer2 = 0,
+                        n_neurons_layer3 = 0,
+                        activation_layer1 = 'sigmoid',#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+                        activation_layer2 = 'tanh',
+                        activation_layer3 = 'relu',
+                        learning_rate=0.01, beta_1=0.9, beta_2=0.999,
+                        loss='mse',
+                        metrics=['mae','msle'],
+                        patience=10,
+                        batch_size=32, epochs=150,
+                        init_mode='normal',#['glorot_normal', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+                        dropout_rate=0.2,
+                        weight_constraint=1.0 #[1.0, 2.0, 3.0, 4.0, 5.0]
+                    ):
 
 
         #### 1. ARCHITECTURE
         model = Sequential()
 
-        model.add(Dense(n_neurons_layer1, input_shape=(nbr_features,), activation=activation_layer1))
+        model.add(Dense(n_neurons_layer1, input_shape=(len(X_train.columns),), activation=activation_layer1))
         model.add(Dropout(dropout_rate))   # Dropout helps protect the model from memorizing or "overfitting" the training data
-        model.add(Dense(n_neurons_layer2, activation=activation_layer2))
-        model.add(Dropout(dropout_rate))
+        if n_neurons_layer2>0:
+            model.add(Dense(n_neurons_layer2, activation=activation_layer2))
+            model.add(Dropout(dropout_rate))
+        if n_neurons_layer3>0:
+            model.add(Dense(n_neurons_layer3, activation=activation_layer3))
+            model.add(Dropout(dropout_rate))
         model.add(Dense(1, activation='linear', kernel_initializer=init_mode))
 
         #### 2. COMPILATION
@@ -567,23 +577,25 @@ class ModelGenerator():
                 metrics=metrics)
 
         #### 3. FIT
-        es = EarlyStopping(patience=patience, restore_best_weights=True)
+        if fitting:
+            es = EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True)
 
-        # Don't set the fit method so the model can be used in GridSearchCV
-    #     history = model.fit(X_train, y_train,
-    #                         validation_split=0.3,
-    #                         shuffle=True,
-    #                         batch_size=batch_size, # When batch size is too small --> no generalization
-    #                         epochs=epochs,    # When batch size is too large --> slow computations
-    #                         callbacks=[es],
-    #                         verbose=0)
+            # Don't set the fit method so the model can be used in GridSearchCV
+            history = model.fit(X_train, y_train,
+                                validation_split=0.3,
+                                shuffle=True,
+                                batch_size=batch_size, # When batch size is too small --> no generalization
+                                epochs=epochs,    # When batch size is too large --> slow computations
+                                callbacks=[es],
+                                verbose=0
+                            )
 
-    #     plot_history(history)
+            # plot_loss_accuracy(history)
 
         return model
 
     def find_best_model(self, models_to_test = [
-                                                # 'NeuralNetwork',
+                                                'NeuralNetwork',
                                                 'Ridge',
                                                 'Lasso',
                                                 'ElasticNet',
@@ -591,14 +603,14 @@ class ModelGenerator():
                                                 'KNeighborsRegressor',
                                                 'SVR',
                                                 # 'DecisionTreeRegressor',
-                                                'RandomForestRegressor',
+                                                # 'RandomForestRegressor',
                                                 # 'GradientBoostingRegressor',
                                                 'XGBRegressor'
                                                 ]):
         """
         This function will find the best hyper parameter for several possible models.
         """
-
+        models_names = []
         if self.preprocessor_analysed is None:
             self.define_preprocessing_after_analysis()
 
@@ -612,75 +624,101 @@ class ModelGenerator():
         models_parametrized = []
         # NeuralNetwork
         if 'NeuralNetwork' in models_to_test:
-            # Instanciate model
-            model = KerasRegressor(model=self.create_NN_model(nbr_features= len(X.columns)), verbose=0)
+            GridSearch_NeuralNetwork = True
+            if GridSearch_NeuralNetwork:
+                # Instanciate model
+                # Don't add early stop to cross-validation: https://stackoverflow.com/questions/48127550/early-stopping-with-keras-and-sklearn-gridsearchcv-cross-validation
+                model = KerasRegressor(model=self.create_NN_model(X_train=X, y_train=y, fitting = False), verbose=0)
 
-            # fix random seed for reproducibility
-            tf.random.set_seed(42)
-            # Hyperparameter search space
-            search_space = {
-                'epochs': [50],#[50, 100, 150],
-                'batch_size': [32],#[16,32,64],
-                'model__n_neurons_layer1': [32],#[16,32,64],
-                'model__n_neurons_layer2': [32],#[16,32,64],
-                'model__activation_layer1': ['relu'],#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
-                'model__activation_layer2': ['relu'],#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
-                'model__dropout_rate': [0.2],#[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-                'model__weight_constraint': [3.0],#[1.0, 2.0, 3.0, 4.0, 5.0],
-            #     'optimizer__learning_rate': [0.01],
-            #     'optimizer__beta_1': [0.9],
-            #     'optimizer__beta_2': [0.999],
-            #     'loss': ['mse'],
-            #     'validation_split': [0.3],
-            #     'shuffle':[True],
-                'model__init_mode': ['normal'],#['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
-            #     'callbacks__patience': [20]
-            }
+                # fix random seed for reproducibility
+                tf.random.set_seed(42)
+                # Hyperparameter search space
+                search_space = {
+                    'epochs': [30],#[50, 100, 150],
+                    'batch_size': [16,32,64],
+#                     'model__n_neurons_layer1': [16,32,64],
+#                     'model__n_neurons_layer2': [0],#[16,32,64],
+                    # 'model__n_neurons_layer3': [0],#[16,32,64],
+#                     'model__activation_layer1': ['sigmoid'],#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
+                    # 'model__activation_layer2': ['relu'],#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
+                    # 'model__activation_layer3': ['relu'],#['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear'],
+#                     'model__dropout_rate': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                    # 'model__weight_constraint': [3.0],#[1.0, 2.0, 3.0, 4.0, 5.0],
+                    # 'model__init_mode': ['normal'],#['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+                    # 'optimizer__learning_rate': [0.01, 0.001],
+                #     'optimizer__beta_1': [0.9],
+                #     'optimizer__beta_2': [0.999],
+                #     'loss': ['mse'],
+                    # 'validation_split': [0.1,0.3,0.5],
+                    # 'shuffle':[True],
+                }
 
-            print('Finding best parameters for NeuralNetwork model...')
-            NeuralNetwork_rsearch = GridSearchCV(
-                                        model, search_space,
-                                        cv=5, verbose=0)
-            models_parametrized.append(NeuralNetwork_rsearch)
+                print('Finding best parameters for NeuralNetwork model...')
+                NeuralNetwork_rsearch = GridSearchCV(
+                                            model, search_space,
+                                            cv=5, verbose=0)
+                models_parametrized.append(NeuralNetwork_rsearch)
+                models_names.append('NeuralNetwork')
+
+                # summarize results
+                # report_best_scores(NeuralNetwork_rsearch.cv_results_, 1)
+
+
+            else:
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+
+                # Clear memory
+                tf.keras.backend.clear_session()
+
+                NeuralNetwork_rsearch = self.create_NN_model(X_train=X_train, y_train=y_train, fitting = True)
+                NeuralNetwork_rsearch.summary()
+
+                NeuralNetwork_rsearch.evaluate(X_test, y_test)
+
+                models_parametrized.append(KerasRegressor(model=NeuralNetwork_rsearch))
+                models_names.append('NeuralNetwork')
 
         # Ridge
         if 'Ridge' in models_to_test:
             print('Finding best parameters for Ridge model...')
-            Ridge_rsearch = self.hyperparametrization(X,y, model = Ridge(),
+            Ridge_rsearch,model_name = self.hyperparametrization(X,y, model = Ridge(),
                                 search_space = {
                                                 'alpha': [0.001,0.01,0.1,1,10,100],
                                                 'tol': [0.001,0.01,0.1,1,10,100],
                                                 'solver': ['lsqr','auto']# auto, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga', 'lbfgs']
                                             })
             models_parametrized.append(Ridge_rsearch)
+            models_names.append(model_name)
 
         # Lasso
         if 'Lasso' in models_to_test:
             print('Finding best parameters for Lasso model...')
-            Lasso_rsearch = self.hyperparametrization(X,y, model = Lasso(),
+            Lasso_rsearch,model_name = self.hyperparametrization(X,y, model = Lasso(),
                                 search_space = {
                                                 'alpha': [0.001,0.01,0.1,1,10,100],
-                                                'tol': [0.001,0.01,0.1,1,10,100],
+                                                'tol': [0.1],#[0.001,0.01,0.1,1,10,100],
                                                 'selection': ['cyclic', 'random']
                                                 })
             models_parametrized.append(Lasso_rsearch)
+            models_names.append(model_name)
 
         # ElasticNet
         if 'ElasticNet' in models_to_test:
             print('Finding best parameters for ElasticNet model...')
-            ElasticNet_rsearch = self.hyperparametrization(X,y, model = ElasticNet(),
+            ElasticNet_rsearch,model_name = self.hyperparametrization(X,y, model = ElasticNet(),
                                 search_space = {
                                                 'alpha': [0.001,0.01,0.1,1,10,100],
-                                                'tol': [0.001],#[0.001,0.01,0.1,1,10,100],
+                                                'tol': [0.1],#[0.001,0.01,0.1,1,10,100],
                                                 'l1_ratio': [0,0.3,0.6,1],
                                                 'selection': ['cyclic', 'random']
                                                 })
             models_parametrized.append(ElasticNet_rsearch)
+            models_names.append(model_name)
 
         # SGDRegressor
         if 'SGDRegressor' in models_to_test:
             print('Finding best parameters for SGDRegressor model...')
-            SGDRegressor_rsearch = self.hyperparametrization(X,y, model = SGDRegressor(),
+            SGDRegressor_rsearch,model_name = self.hyperparametrization(X,y, model = SGDRegressor(),
                                 search_space = {
     'loss':['squared_error','epsilon_insensitive', 'squared_epsilon_insensitive'],#, 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'],
     'alpha': [0.0001, 0.001,0.01],
@@ -694,23 +732,25 @@ class ModelGenerator():
     'early_stopping': [True]
     })
             models_parametrized.append(SGDRegressor_rsearch)
+            models_names.append(model_name)
 
         # KNeighborsRegressor
         if 'KNeighborsRegressor' in models_to_test:
             print('Finding best parameters for KNeighborsRegressor model...')
-            KNeighborsRegressor_rsearch = self.hyperparametrization(X,y, model = KNeighborsRegressor(),
+            KNeighborsRegressor_rsearch,model_name = self.hyperparametrization(X,y, model = KNeighborsRegressor(),
                                 search_space = {
-    'n_neighbors': range(10,50,2),
+    'n_neighbors': range(20,50,3),
     'weights': ['uniform', 'distance'],
     'algorithm': ['ball_tree', 'kd_tree', 'brute'],
-    'leaf_size': range(2,15,1)
+    'leaf_size': range(2,10,1)
 })
             models_parametrized.append(KNeighborsRegressor_rsearch)
+            models_names.append(model_name)
 
         # SVR
         if 'SVR' in models_to_test:
             print('Finding best parameters for SVR model...')
-            SVR_rsearch = self.hyperparametrization(X,y, model = SVR(),
+            SVR_rsearch,model_name = self.hyperparametrization(X,y, model = SVR(),
                                 search_space = {
     'kernel': ['poly','sigmoid', 'rbf'],#['linear','poly','sigmoid', 'rbf'],
     'degree': range(2,5,1),
@@ -721,11 +761,12 @@ class ModelGenerator():
     'epsilon': [0.1,1,10]
 })
             models_parametrized.append(SVR_rsearch)
+            models_names.append(model_name)
 
         # DecisionTreeRegressor
         if 'DecisionTreeRegressor' in models_to_test:
             print('Finding best parameters for DecisionTreeRegressor model...')
-            DecisionTreeRegressor_rsearch = self.hyperparametrization(X,y, model = DecisionTreeRegressor(),
+            DecisionTreeRegressor_rsearch,model_name = self.hyperparametrization(X,y, model = DecisionTreeRegressor(),
                                 search_space = {
     'criterion': ['squared_error'],#['squared_error', 'friedman_mse', 'absolute_error', 'poisson'],
     'splitter': ['best','random'],
@@ -739,11 +780,12 @@ class ModelGenerator():
     'ccp_alpha':[0.0],#[0.2,0.25,0.3,0.35],
 })
             models_parametrized.append(DecisionTreeRegressor_rsearch)
+            models_names.append(model_name)
 
         # RandomForestRegressor
         if 'RandomForestRegressor' in models_to_test:
             print('Finding best parameters for RandomForestRegressor model...')
-            RandomForestRegressor_rsearch = self.hyperparametrization(X,y, model = RandomForestRegressor(),
+            RandomForestRegressor_rsearch,model_name = self.hyperparametrization(X,y, model = RandomForestRegressor(),
                                 search_space = {
     'n_jobs':[-1],
     'n_estimators': [100],#[100,200,500,1000],
@@ -751,19 +793,20 @@ class ModelGenerator():
     'max_depth': range(5,20,5),
     'min_samples_split': range(2,22,5),
     'min_samples_leaf': range(2,10,2),
-    'min_weight_fraction_leaf': [0.0,0.1,0.2],
-    'max_features': [0.7,0.8,0.9,1.0],
+    'min_weight_fraction_leaf': [0.0],#[0.0,0.1,0.2],
+    'max_features': [0.8],#[0.7,0.8,0.9,1.0],
     'max_leaf_nodes': range(3,8,2), #int, default=None
-    'min_impurity_decrease': [0.3,0.4,0.5],
+    'min_impurity_decrease': [0.3],#[0.3,0.4,0.5],
     'bootstrap': [True, False],
     'ccp_alpha':[0.0],
 })
             models_parametrized.append(RandomForestRegressor_rsearch)
+            models_names.append(model_name)
 
         # GradientBoostingRegressor
         if 'GradientBoostingRegressor' in models_to_test:
             print('Finding best parameters for GradientBoostingRegressor model...')
-            GradientBoostingRegressor_rsearch = self.hyperparametrization(X,y, model = GradientBoostingRegressor(),
+            GradientBoostingRegressor_rsearch,model_name = self.hyperparametrization(X,y, model = GradientBoostingRegressor(),
                                 search_space = {
     'learning_rate': [0.1],#[0.001,0.01,0.1],
     'n_estimators': [100],#[100,200,500,1000],
@@ -780,11 +823,12 @@ class ModelGenerator():
     'ccp_alpha':[0.3],#[0.25,0.3,0.35],
 })
             models_parametrized.append(GradientBoostingRegressor_rsearch)
+            models_names.append(model_name)
 
         # XGBRegressor
         if 'XGBRegressor' in models_to_test:
             print('Finding best parameters for XGBRegressor model...')
-            XGBRegressor_rsearch = self.hyperparametrization(X,y, model = XGBRegressor(),
+            XGBRegressor_rsearch,model_name = self.hyperparametrization(X,y, model = XGBRegressor(),
                                 search_space = {
     "colsample_bytree": [0.6,0.7,0.8],
 #     "gamma": [0.3,0.4,0.5],
@@ -794,44 +838,72 @@ class ModelGenerator():
     "subsample": [0.2],#[0.1,0.2,0.3]
 })
             models_parametrized.append(XGBRegressor_rsearch)
+            models_names.append(model_name)
 
         ## Compare models side by side
-        # train_test_split
-        X_train, X_test, y_train, y_test = train_test_split(X, y,
-                                                            test_size = 0.1,
-                                                            random_state = 0)
-        scores = pd.DataFrame(columns=['model','r2','explained_variance','MSE',#'MSLE',
+        # Kfold splitting for measuring variability in the model
+        kf = KFold(n_splits=5)
+        kf.get_n_splits(X)
+
+        scores = pd.DataFrame(columns=['model','training_time','r2','explained_variance','MSE',#'MSLE',
                                     'MAE','RMSE'])
 
         print('Finding best model...')
-        for mod in [LinearRegression(n_jobs=-1)] + models_parametrized:
-            mod.fit(X_train,y_train)
-            mod_name = type(mod).__name__
-            y_pred = mod.predict(X_test)
+        split_index = 0
+        for train_index, test_index in kf.split(X):
+            # Split the data into train and test
+            X_train, X_test = np.array(X)[train_index], np.array(X)[test_index]
+            y_train, y_test = np.array(y)[train_index], np.array(y)[test_index]
 
-            explained_variance=metrics.explained_variance_score(y_test, y_pred)
-            mean_absolute_error=metrics.mean_absolute_error(y_test, y_pred)
-            mse=metrics.mean_squared_error(y_test, y_pred)
-        #     mean_squared_log_error=metrics.mean_squared_log_error(y_test, y_pred)
-            mod_r2=metrics.r2_score(y_test, y_pred)
+            split_index += 1
+
+            for mod_index in range(len(models_parametrized)):
+                mod_name = models_names[mod_index]
+                print('\n')
+                print(f'Testing {mod_name} ({mod_index+1}/{len(models_parametrized)} models) on KFold split number {split_index}')
+
+                mod = models_parametrized[mod_index]
+                start = time.time()
+                mod.fit(X_train,y_train)
+                stop = time.time()
+                training_time = stop - start
+
+                mod_name = models_names[mod_index]
+
+                y_pred = mod.predict(X_test)
+
+                explained_variance=metrics.explained_variance_score(y_test, y_pred)
+                mean_absolute_error=metrics.mean_absolute_error(y_test, y_pred)
+                mse=metrics.mean_squared_error(y_test, y_pred)
+            #     mean_squared_log_error=metrics.mean_squared_log_error(y_test, y_pred)
+                mod_r2=metrics.r2_score(y_test, y_pred)
 
 
-            scores = pd.concat([scores, pd.DataFrame.from_dict({'model':[mod_name],
-                                        'r2':[round(mod_r2,4)],
-                                        'explained_variance':[round(explained_variance,4)],
-                                        'MAE':[round(mean_absolute_error,4)],
-                                        'MSE':[round(mse,4)],
-        #                                  'MSLE':[round(mean_squared_log_error,4)],
-                                        'RMSE':[round(np.sqrt(mse),4)]
-                                        })
-                            ]).reset_index(drop=True)
+                scores = pd.concat([scores, pd.DataFrame.from_dict({'model':[mod_name],
+                                                            'training_time':round(training_time,4),
+                                            'r2':[round(mod_r2,4)],
+                                            'explained_variance':[round(explained_variance,4)],
+                                            'MAE':[round(mean_absolute_error,4)],
+                                            'MSE':[round(mse,4)],
+            #                                  'MSLE':[round(mean_squared_log_error,4)],
+                                            'RMSE':[round(np.sqrt(mse),4)]
+                                            })
+                                ]).reset_index(drop=True)
 
-            if self.model is None:
-                self.model = mod
-            if mod_r2> self.model.score(X_test, y_test):
-                self.model = mod
 
-        print(scores.sort_values(by='r2', ascending=False))
+
+
+
+        means_df = scores.groupby('model').mean().round(3)
+        std_df = scores.groupby('model').std().round(3)
+        std_df.columns= [col+'_std' for col in std_df.columns]
+        models_summary = pd.concat([means_df,std_df], axis=1).sort_values(by='r2', ascending=False)
+        print(models_summary)
+
+
+        best_model = models_summary.head(1).reset_index()
+        best_model = best_model['model'][0]
+        self.model = models_parametrized[models_names.index(best_model)]
 
     def save_best_model(self):
         """
@@ -864,7 +936,7 @@ class ModelGenerator():
 
 if __name__ == "__main__":
     didnt_work = []
-    models_to_create = list(dict_city_number_wggesucht.keys()) + ['allcities']
+    models_to_create = ['allcities'] + list(dict_city_number_wggesucht.keys())
     for city in models_to_create:
         for offer_type in ['WG', 'Single-room flat', 'Apartment']: #'WG', 'Single-room flat', 'Apartment'
             try:

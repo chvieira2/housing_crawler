@@ -4,6 +4,7 @@
 .DS_Store
 raw_data/
 *.csv
+*.pkl
 **/__pycache__/
 .env
 *.geojson

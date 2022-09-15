@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Housing Crawler - search for flats by crawling property portals and save them locally. This is the main command-line executable, for running on the console"""
+"""Housing Crawler - search for flats by crawling property portals and save them locally.
+
+This is the main command-line executable, for running on the console.
+For long-term search, please run CrawlWgGesucht().long_search() inside housing_crawler/crawl_wggesucht.py instead"""
 
 import argparse
 import os
 # import logging
 # import time
-from pprint import pformat
+# from pprint import pformat
 
-from housing_crawler.crawl_wggesucht_old import CrawlWgGesucht
+from housing_crawler.crawl_wggesucht import CrawlWgGesucht
 
 __author__ = "Carlos Henrique Vieira e Vieira"
 __version__ = "1.0"

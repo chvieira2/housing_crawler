@@ -1,6 +1,6 @@
 # packaging
 pip>=9
-# pyenv
+pyenv
 setuptools>=26
 twine
 wheel>=0.29
@@ -26,3 +26,4 @@ six>=1.14
 # memoized-property
 # termcolor
 geopy
+streamlit

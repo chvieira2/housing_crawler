@@ -180,7 +180,7 @@ def long_search(day_stop_search = '01.01.2023', start_search_from_index = 0):
         collect_cities_csvs(cities = cities_to_search[start_search_from_index:])
 
         # Constantly changing cities is detected by the page and goes into CAPTCH. Sleep for 15 min in between cities to avoid that.
-        for temp in range(15*60)[::-1]:
+        for temp in range(60*60)[::-1]:
             print(f'Next search will start in {temp} seconds.', end='\r')
             time.sleep(1)
         print('\n\n\n')

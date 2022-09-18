@@ -86,9 +86,9 @@ with placeholder_map.container():
 
     st.write('\n')
     st.markdown("""
-            # Have you ever wondered if what you pay for your room in a WG (flatshare) is fair according to the market? I've collected thousands of ads from wg-gesucht.de to answer that question for you.
+            ### Page under construction.
             """, unsafe_allow_html=True)
-
+# Have you ever wondered if what you pay for your room in a WG (flatshare) is fair according to the market? I've collected thousands of ads from wg-gesucht.de to answer that question for you.
 
 # #------------------------user inputs-----------------------------------
 # #inputs for weights for users

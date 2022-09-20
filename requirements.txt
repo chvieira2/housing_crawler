@@ -39,4 +39,3 @@ six>=1.14
 geopy
 streamlit
 streamlit-folium
-dateutil

@@ -1,6 +1,6 @@
 # packaging
 pip>=9
-pyenv
+# pyenv
 setuptools>=26
 twine
 wheel>=0.29

@@ -78,7 +78,7 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-#----Simple placeholder for the world map with arbitrary city coordenates------
+#----Content starts------
 placeholder_map = st.empty()
 
 with placeholder_map.container():

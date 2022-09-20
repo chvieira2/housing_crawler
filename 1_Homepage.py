@@ -664,7 +664,7 @@ with st.form("entry_form", clear_on_submit=False):
             with placeholder.container():
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
-                    st.pyplot(price_rank_cities(df = df_filtered, city = st.session_state["city"]), use_container_width=True)
+                    st.pyplot(price_rank_cities(df = df_filtered, city = st.session_state["city"]))
 
             st.markdown("""
                 *Values displayed here are **warm** rental prices that more accurately reflect living costs. Warm rent usually include the cold rent, water, heating and house maintenance costs. It may also include internet and TV/Radio/Internet taxes.
@@ -718,8 +718,7 @@ with st.form("entry_form", clear_on_submit=False):
                                                     x_title = "",
                                                     transform_type='str',
                                                     x_axis_rotation = 45,
-                                                    fig_height = 15),
-                                        use_container_width=True)
+                                                    fig_height = 15))
 
                 with col2:
                     df_foo = df_filtered[~df_filtered['wg_type_studenten'].isnull()]
@@ -731,8 +730,7 @@ with st.form("entry_form", clear_on_submit=False):
                                                     transform_type='str',
                                                     x_axis_rotation = 45,
                                                     fig_height = 15,
-                                                    order=['Others','Students WGs']),
-                                        use_container_width=True)
+                                                    order=['Others','Students WGs']))
 
                 with col3:
                     df_foo = df_filtered.query('capacity <= 7')
@@ -741,8 +739,7 @@ with st.form("entry_form", clear_on_submit=False):
                                                 x = 'n_flatmates',
                                                 x_title = "Number of flatmates",
                                                 transform_type='int',
-                                                font_scale=2.5),
-                                        use_container_width=True)
+                                                font_scale=2.5))
 
 
 
@@ -782,8 +779,7 @@ with st.form("entry_form", clear_on_submit=False):
                                                     x = 'rental_length_term',
                                                     x_title = "Max rental length (days)",
                                                     transform_type='int',
-                                                    font_scale=2.5),
-                                        use_container_width=True)
+                                                    font_scale=2.5))
 
                 with col2:
                     df_foo = df_filtered[~df_filtered['schufa_needed'].isnull()]
@@ -792,8 +788,7 @@ with st.form("entry_form", clear_on_submit=False):
                                                     x = 'schufa_needed',
                                                     x_title = "Schufa required?",
                                                     transform_type='str',
-                                                    fig_height = 20),
-                                        use_container_width=True)
+                                                    fig_height = 20))
 
                 with col3:
                     df_foo = df_filtered
@@ -802,8 +797,7 @@ with st.form("entry_form", clear_on_submit=False):
                                                     x = 'commercial_landlord',
                                                     x_title = "Type of landlord",
                                                     transform_type='str',
-                                                    fig_height = 20),
-                                        use_container_width=True)
+                                                    fig_height = 20))
 
 
             placeholder = st.empty()
@@ -822,5 +816,4 @@ with st.form("entry_form", clear_on_submit=False):
                                                     x_axis_rotation = 45,
                                                     fig_height = 5,
                                                     order='mean',
-                                                    font_scale=1.5),
-                                        use_container_width=True)
+                                                    font_scale=1.5))

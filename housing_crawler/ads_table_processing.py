@@ -277,7 +277,8 @@ def filter_out_bad_entries(ads_df, country = 'Germany',
     ads_df['price_per_sqm_cold'] = round(ads_df['cold_rent_euros']/ads_df['size_sqm'],2)
     # For WGs, I assume that all rooms in the flat have the same size, so I obtain total size of the flat by multiplying the room size by the number of rooms (plus one (corresponding to the kitchen)).
     # Effectivelly the assumption about the flat size seems valid as the mean size of the offered room over a large number of ads tends to the mean of all rooms in flats. That is unless there are biases with people generally offering the smallest room in the flat, which could very well be the case.
-    # ads_df["price_per_sqm_cold"] = ads_df.apply(lambda x: x["price_per_sqm_cold"]/(x["capacity"]) if x["type_offer_simple"] == 'WG' else x["price_per_sqm_cold"], axis = 1)
+    ads_df["price_per_sqm_warm"] = ads_df.apply(lambda x: x["price_euros"]*x["capacity"]/x["home_total_size"] if x["type_offer_simple"] == 'WG' else x["price_per_sqm_cold"], axis = 1)
+    ads_df["price_per_sqm_cold"] = ads_df.apply(lambda x: x["cold_rent_euros"]*x["capacity"]/x["home_total_size"] if x["type_offer_simple"] == 'WG' else x["price_per_sqm_cold"], axis = 1)
 
 
     ## Split type of offer

@@ -27,3 +27,4 @@ six>=1.14
 # termcolor
 geopy
 streamlit
+streamlit-folium

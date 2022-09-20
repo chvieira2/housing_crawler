@@ -11,22 +11,14 @@ __email__ = "carloshvieira2@gmail.com"
 __status__ = "Production"
 
 
-# from sqlalchemy import null
 import streamlit as st
-# import folium
-# from folium import GeoJson
-# import streamlit_folium as stf
-# from folium.plugins import HeatMap, MarkerCluster
-# import numpy as np
-# import pandas as pd
-# from config.config import ROOT_DIR
-# from housing_crawler.params import dict_city_number_wggesucht
-# from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters
+from housing_crawler.params import dict_city_number_wggesucht
+
 
 #-----------------------page configuration-------------------------
 st.set_page_config(
     page_title="housing_crawler",
-    page_icon=':house:', # gives a random emoji //to be addressed for final ver
+    page_icon=':house:', # gives a random emoji
     layout="wide",
     initial_sidebar_state="auto")
 
@@ -78,17 +70,144 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-#----Simple placeholder for the world map with arbitrary city coordenates------
+#----Content starts------
 placeholder_map = st.empty()
-
 with placeholder_map.container():
-
-
-    st.write('\n')
     st.markdown("""
-            ### Page under construction.
+            ### Have you ever wondered if what you pay for your room in a WG (flatshare) is according to the current market?
+            #### I've collected thousands of ads from wg-gesucht.de to answer that question for you.
             """, unsafe_allow_html=True)
-# Have you ever wondered if what you pay for your room in a WG (flatshare) is fair according to the market? I've collected thousands of ads from wg-gesucht.de to answer that question for you.
+
+with st.expander("I want to know the market price for my room in a WG"):
+    st.caption("""
+        This information is not stored anywhere and won't be used for anything other than predicting the price.
+        The more information you give, the better is the prediction.
+                """, unsafe_allow_html=True)
+    with st.form("entry_form", clear_on_submit=True):
+        placeholder_map = st.empty()
+        with placeholder_map.container():
+            st.subheader("""
+                    \n
+                    Location
+                    """)
+            col1, col2, col3, col4 = st.columns(4)
+            col1.selectbox(label="City*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0, key='city')
+            col2.text_input("Street and house number*", value="", key='address', max_chars = 100)
+            col3.text_input("Neighborhood*", value="", key='neighborhood', max_chars = 100)
+            col4.text_input("Zip code*", value="", key='zip_code', max_chars = 20)
+
+        placeholder_map = st.empty()
+        with placeholder_map.container():
+            st.subheader("""
+                    \n
+                    Information about the room and building
+                    """)
+            col1, col2, col3, col4 = st.columns(4)
+            col1.number_input(label='Room size (m²)*', min_value=0, max_value=60, value=0, step=1, key='room_size')
+            col2.number_input(label='Total flat/house size (m²)', min_value=0, max_value=250, value=0, step=1, key='total_flat_size')
+            col3.selectbox(label="Type of building", options=['<Please select>','Types of building here'], index=0, key='building_type')
+            col4.selectbox(label="Floor", options=['<Please select>','Basement', 'Low ground floor','Ground floor','High ground floor','1st floor','2nd floor','3rd floor','4th floor','5th floor','6th floor or higher','Attic'], index=0, key='floor')
+
+
+            col1.selectbox(label='Parking condition', options=['<Please select>','Good parking facilities', 'Bad parking facilities', 'Resident parking', 'Own parking', 'Underground parking'], index=0, key='parking')
+            col2.select_slider(label='Walking distance to public transport (in minutes)', options=[str(n) for n in range(1,61)], value='10', key='distance_public_transport')
+            col3.selectbox("Barrier-free", ['<Please select>','Suitable for wheelchair','Not suitable for wheelchair'], index=0, key='barrier_free')
+            col4.selectbox("Schufa requested?", ['<Please select>','Yes', 'No'], index=0, key='schufa_requested')
+
+
+        placeholder_map = st.empty()
+        with placeholder_map.container():
+            st.subheader("""
+                    \n
+                    WG-info
+                    """)
+            col1, col2, col3 = st.columns(3)
+            col1.select_slider(label='Female flatmates', options=[str(n) for n in range(0,11)], value='0', key='female_flatmates')
+            col2.select_slider(label='Male flatmates', options=[str(n) for n in range(0,11)], value='0', key='male_flatmates')
+            col3.select_slider(label='Diverse flatmates', options=[str(n) for n in range(0,11)], value='0', key='diverse_flatmates')
+            col1.select_slider(label='Flatmates min age', options=[str(n) for n in range(0,100)], value='0', key='min_age_flatmates')
+            col2.select_slider(label='Flatmates max age', options=[str(n) for n in range(0,100)], value='0', key='max_age_flatmates')
+            col3.selectbox("Smoking", ['<Please select>','Allowed everywhere', 'Allowed in your room', 'Allowed on the balcony', 'No smoking'], index=0, key='smoking')
+
+            placeholder_map = st.empty()
+            with placeholder_map.container():
+                col1, col2 = st.columns(2)
+                col1.multiselect(label='Type of WG', options=['<Please select>','WG types'], default=None, key='wg_type')
+                col2.multiselect(label='Spoken languages', options=['<Please select>','Languages'], default=None, key='languages')
+
+        placeholder_map = st.empty()
+        with placeholder_map.container():
+            st.subheader("""
+                    \n
+                    Energy and power
+                    """)
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.selectbox(label='Certification type', options=['<Please select>','Requirement','Consumption'], index=0, key='energy_certificate')
+            col2.text_input("Power (in kW h/(m²a))", value="", key='kennwert', max_chars = 20)
+            col3.multiselect(label='Heating energy source', options=['Energy sources'], default=None, key='energy_source')
+            col4.text_input(label='Building construction year', value="", key='building_year', max_chars = 20)
+            col5.multiselect(label='Energy efficiency class', options=['A+','A','B','C','D','E','F','G','H'], default=None, key='energy_efficiency')
+
+
+
+        placeholder_map = st.empty()
+        with placeholder_map.container():
+            st.subheader("""
+                    \n
+                    Utils
+                    """)
+            col1, col2, col3 = st.columns(3)
+            col1.selectbox(label='Heating', options=['<Please select>','Central heating','Gas heating', 'Furnace heating', 'District heating', 'Coal oven', 'Night storage heating'], index=0, key='heating')
+            col1.multiselect(label='Internet', options=['DSL', 'Flatrate', 'WLAN'], default=None, key='internet')
+            col1.selectbox(label='Internet speed', options=['<Please select>','Slower than 10 Mbit/s','Up to 10 Mbit/s','Up to 16 Mbit/s','Up to 25 Mbit/s','Up to 50 Mbit/s','Up to 100 Mbit/s','Faster than 100 Mbit/s'], index=0, key='internet_speed')
+            col2.multiselect(label='Furniture', options=['Furnished', 'Partly furnished'], default=None, key='furniture')
+            col2.multiselect(label='Floor type', options=['Floor boards', 'Parquet', 'Laminate', 'Carpet', 'Tiles', 'PVC', 'Underfloor heating'], default=None, key='floor_type')
+            col3.multiselect(label='TV', options=['Cable', 'Satellite'], default=None, key='tv')
+            col3.multiselect(label='Miscellaneous', options=['Washing machine', 'Dishwasher', 'Terrace', 'Balcony', 'Garden', 'Shared garden', 'Basement', 'Elevator', 'Pets allowed', 'Bicycle storage'], default=None, key='miscellaneous')
+
+        "---"
+        submitted_form = st.form_submit_button("Submit form")
+
+        if submitted_form:
+            st.markdown("""
+                    ### Page under construction.
+                    """, unsafe_allow_html=True)
+
+with st.expander("I found an ad in wg-gesucht.de and want to know if the price follows the market"):
+    with st.form("entry_url", clear_on_submit=False):
+        st.text_input("Paste here the link to a wg-gesucht.de ad. The link should look like this: 'https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html'", value="", key='url', max_chars = 250)
+
+        "---"
+        submitted_url = st.form_submit_button("Submit url")
+
+        if submitted_url:
+            url = st.session_state["url"]
+            url_ok = False
+            if url == '':
+                st.markdown("""
+                    Please submit a link to the page of the ad of interest.
+                    """, unsafe_allow_html=True)
+                url_ok = False
+            if ~url.startswith('https://www.'):
+                url = 'https://www.' + url
+                url_ok = True
+            elif ~url.startswith('https://'):
+                url = 'https://' + url
+                url_ok = True
+            if 'wg-gesucht.de' not in url:
+                st.markdown("""
+                    The link must be from wg-gesucht.de
+                    """, unsafe_allow_html=True)
+                url_ok = False
+
+            if url_ok:
+                st.text(f'Searching for {url}')
+                st.markdown("""
+                        ### Page under construction.
+                        """, unsafe_allow_html=True)
+
+
+
 
 # #------------------------user inputs-----------------------------------
 # #inputs for weights for users
@@ -106,17 +225,17 @@ with placeholder_map.container():
 #     form = st.form("calc_weights")
 
 #     # City selection
-#     form.selectbox(label = 'Select a city of interest', key='input_city', options = preloaded_cities, index=preloaded_cities.index('Berlin'))
+#     form.selectbox(label = 'Please select a city of interest', key='input_city', options = preloaded_cities, index=preloaded_cities.index('Berlin'))
 #     # form.text_input(label='Type city name', key='input_city', type="default", on_change=None, placeholder='p.ex. Berlin')
 
 
 #     expander_weights = form.expander("Options")
 
 #     # Weights selection
-#     expander_weights.select_slider(label='Activities and Services:', options=list(weight_dict.keys()), value='Average', key='weight_activity', help=None, on_change=None)
-#     expander_weights.select_slider(label='Comfort:', options=list(weight_dict.keys()), value='Average', key='weight_comfort', help=None, on_change=None)
-#     expander_weights.select_slider(label='Mobility:', options=list(weight_dict.keys()), value='Average', key='weight_mobility', help=None, on_change=None)
-#     expander_weights.select_slider(label='Social life:', options=list(weight_dict.keys()), value='Average', key='weight_social', help=None, on_change=None)
+#     expander_weights.select_slider(label='Activities and Services:', options=list(weight_dict.keys()), value='Average', key='weight_activity')
+#     expander_weights.select_slider(label='Comfort:', options=list(weight_dict.keys()), value='Average', key='weight_comfort')
+#     expander_weights.select_slider(label='Mobility:', options=list(weight_dict.keys()), value='Average', key='weight_mobility')
+#     expander_weights.select_slider(label='Social life:', options=list(weight_dict.keys()), value='Average', key='weight_social')
 
 
 

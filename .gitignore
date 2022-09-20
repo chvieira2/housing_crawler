@@ -8,6 +8,9 @@ raw_data/
 **/__pycache__/
 .env
 *.geojson
+!border.geojson
 # *.ipynb
 *.html
 # notebooks/
+*.shp
+!germany_summary.shp

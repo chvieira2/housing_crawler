@@ -9,6 +9,7 @@ raw_data/
 .env
 *.geojson
 !housing_crawler/data/germany/bundeslaender/*.geojson
+!housing_crawler/data/**/*border.geojson
 # *.ipynb
 *.html
 # notebooks/

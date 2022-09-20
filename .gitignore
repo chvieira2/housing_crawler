@@ -8,7 +8,7 @@ raw_data/
 **/__pycache__/
 .env
 *.geojson
-!border.geojson
+!housing_crawler/data/germany/bundeslaender/*.geojson
 # *.ipynb
 *.html
 # notebooks/

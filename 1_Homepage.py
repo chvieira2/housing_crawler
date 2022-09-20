@@ -94,8 +94,14 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 #----Functions------
 @st.cache
-def get_original_data():
-    return get_processed_ads_table()
+def get_data(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data'):
+    """
+    Method to get data (or a portion of it) from local environment and return a dataframe
+    """
+    # try:
+    local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'
+    df = pd.read_csv(local_path)
+    return df
 
 def filter_original_data(df,city,time_period):
     ## Format dates properly
@@ -607,7 +613,7 @@ with st.form("entry_form", clear_on_submit=False):
         ### Obtain main ads table ###
         #############################
         # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-        ads_df = get_original_data().copy()
+        ads_df = get_data().copy()
 
         df_filtered = filter_original_data(df = ads_df,
                                         city = st.session_state["city"],

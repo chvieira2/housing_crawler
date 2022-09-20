@@ -8,6 +8,9 @@ wheel>=0.29
 # data science
 numpy
 pandas
+plotly
+matplotlib
+seaborn
 
 # Data Sourcing
 requests

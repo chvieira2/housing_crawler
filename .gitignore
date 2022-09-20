@@ -15,3 +15,10 @@ raw_data/
 *.shp
 !germany_summary.shp
 !ads_OSM.csv
+.shx
+.prj
+.dbf
+.cpg
+plz-5stellig/
+plz-5stellig-centroid/
+!bundeslaender/

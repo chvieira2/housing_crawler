@@ -1,5 +1,5 @@
 # packaging
-pip>=21
+pip>=9
 # pyenv
 setuptools>=26
 twine

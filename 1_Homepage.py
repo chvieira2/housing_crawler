@@ -94,7 +94,7 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 #----Functions------
 @st.cache
-def get_data(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data'):
+def get_data(file_name='ads_OSM.csv', local_file_path=f'data'):
     """
     Method to get data (or a portion of it) from local environment and return a dataframe
     """

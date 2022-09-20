@@ -1,3 +1,4 @@
+import numpy as np
 import folium
 from folium.plugins import HeatMap, Fullscreen
 import branca.colormap

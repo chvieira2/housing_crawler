@@ -1,8 +1,8 @@
 """Interface for webcrawlers. Crawler implementations should subclass this. Based on https://github.com/flathunters/flathunter
 """
-import re
+# import re
 # import logging
-from time import sleep
+# from time import sleep
 import requests
 from bs4 import BeautifulSoup
 from random_user_agent.user_agent import UserAgent

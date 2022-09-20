@@ -1,20 +1,29 @@
 # packaging
-pip>=9
+pip>=21
 # pyenv
 setuptools>=26
 twine
 wheel>=0.29
 
 # data science
+statsmodels
 numpy
 pandas
+geopandas
+shapely
+collections
+
+# Plotting
 plotly
 matplotlib
 seaborn
+branca
+folium
 
 # Data Sourcing
 requests
 bs4
+random_user_agent
 
 # tests/linter
 # black
@@ -31,3 +40,4 @@ six>=1.14
 geopy
 streamlit
 streamlit-folium
+dateutil

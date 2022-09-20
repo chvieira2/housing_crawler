@@ -7,7 +7,7 @@ import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'. Needed to remove SettingWithCopyWarning warning when assigning new value to dataframe column
 import numpy as np
 import time
-import re
+# import re
 import requests
 
 

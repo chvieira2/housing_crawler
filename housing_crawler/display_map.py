@@ -3,10 +3,10 @@ import folium
 from folium.plugins import HeatMap, Fullscreen
 import branca.colormap
 from collections import defaultdict
-from folium import GeoJson, Marker
-from shapely.ops import unary_union
-from shapely.geometry import Polygon
-from housing_crawler.params import dict_city_number_wggesucht
+# from folium import GeoJson, Marker
+# from shapely.ops import unary_union
+# from shapely.geometry import Polygon
+# from housing_crawler.params import dict_city_number_wggesucht
 
 
 def plot_map(df, city_coords:tuple, city_borders):

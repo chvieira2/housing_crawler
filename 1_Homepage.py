@@ -582,7 +582,7 @@ def my_boxplot(df, x, x_title, y='price_per_sqm_cold', transform_type=None,
 
 #----Page start------
 st.markdown("""
-                # Welcome you!
+                # Welcome!
                 ## This dashboard contains everything you want to know about <span style="color:tomato">WG prices</span> in Germany!
                 To get started select below the time period, the city, and the type of market of interest and press "Show results".
                 Alternatively, use the side bar on the left for more options. If you can't see the side bar, click on the ">" on the top left of the page.

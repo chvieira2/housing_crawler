@@ -97,6 +97,7 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 def get_data(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data'):
     """
     Method to get data (or a portion of it) from local environment and return a dataframe
+
     """
     # try:
     local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'

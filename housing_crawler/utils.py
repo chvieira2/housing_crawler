@@ -77,7 +77,17 @@ def get_soup_from_url( url, sess = None, sleep_times = (1,2)):
             'Accept-Language': 'en-US,en;q=0.9',
         'referer':'https://www.wg-gesucht.de/'
         }
-    resp = sess.get(url, headers=HEADERS)
+
+    # Start loop that only ends when get function works. This will repeat the get every 15 minutes to wait for internet to reconnect
+    resp = None
+    while resp is None:
+        try:
+            resp = sess.get(url, headers=HEADERS)
+        except:
+            for temp in range(15*60)[::-1]:
+                print('\n')
+                print(f"There's no internet connection. Trying again in {temp} seconds.", end='\r')
+                time.sleep(1)
 
     # Return soup object
     if resp.status_code != 200:

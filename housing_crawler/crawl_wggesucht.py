@@ -75,7 +75,18 @@ class CrawlWgGesucht(Crawler):
         # Second page load
         print(f"Connecting to:\n{url}")
         time.sleep(3)
-        resp = sess.get(url, headers=self.HEADERS)
+
+        # Start loop that only ends when get function works. This will repeat the get every 15 minutes to wait for internet to reconnect
+        resp = None
+        while resp is None:
+            try:
+                resp = sess.get(url, headers=self.HEADERS)
+            except:
+                for temp in range(15*60)[::-1]:
+                    print('\n')
+                    print(f"There's no internet connection. Trying again in {temp} seconds.", end='\r')
+                    time.sleep(1)
+
         # print(f"Got response code {resp.status_code}")
 
         # Return soup object
@@ -505,7 +516,15 @@ class CrawlWgGesucht(Crawler):
 
 
 if __name__ == "__main__":
-    CrawlWgGesucht().long_search()
+    while True:
+        try:
+            CrawlWgGesucht().long_search()
+        except ConnectionError:
+            for temp in range(15*60)[::-1]:
+                print('============================================================')
+                print("There's no internet connection. Trying again in {temp} seconds.")
+                print('============================================================')
+                time.sleep(1)
     # CrawlWgGesucht().crawl_all_pages('Berlin', 1)
 
     # df = get_file(file_name=f'berlin_ads.csv',

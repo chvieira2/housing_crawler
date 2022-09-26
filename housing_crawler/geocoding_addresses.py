@@ -36,8 +36,8 @@ def geocoding_address(address, sleep_time = 900, retry=True):
     }
 
     # Loop until request is successfull
-    success = False
-    while not success:
+    response = None
+    while response is None:
         try:
             response = requests.get(url, headers=HEADERS)
         except requests.exceptions.ConnectionError:
@@ -54,8 +54,7 @@ def geocoding_address(address, sleep_time = 900, retry=True):
             print(f'Sleeping for {sleep_time/60} min until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for API to be available again.')
             time.sleep(sleep_time)
             sleep_time += sleep_time
-        else:
-            success = True
+            response = None
 
     # set lat and lon
     try:

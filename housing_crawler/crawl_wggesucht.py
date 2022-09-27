@@ -83,9 +83,9 @@ class CrawlWgGesucht(Crawler):
                 resp = sess.get(url, headers=self.HEADERS)
             except:
                 for temp in range(15*60)[::-1]:
-                    print('\n')
                     print(f"There's no internet connection. Trying again in {temp} seconds.", end='\r')
                     time.sleep(1)
+                print('\n')
 
         # print(f"Got response code {resp.status_code}")
 
@@ -214,11 +214,29 @@ class CrawlWgGesucht(Crawler):
         print('Making first call to set filters')
         url_set_filters = self.url_builder(location_name = location_name, page_number = 1,
                     filters = filters)
-        sess.get(url_set_filters, headers=self.HEADERS)
+
+        # Start loop that only ends when get function works. This will repeat the get every 15 minutes to wait for internet to reconnect
+        resp = None
+        while resp is None:
+            try:
+                resp = sess.get(url_set_filters, headers=self.HEADERS)
+            except:
+                for temp in range(15*60)[::-1]:
+                    print(f"There's no internet connection. Trying again in {temp} seconds.", end='\r')
+                    time.sleep(1)
+                print('\n')
 
         # Rotate agent
         self.rotate_user_agent()
-        sess.get(url_set_filters, headers=self.HEADERS)
+        resp = None
+        while resp is None:
+            try:
+                resp = sess.get(url_set_filters, headers=self.HEADERS)
+            except:
+                for temp in range(15*60)[::-1]:
+                    print(f"There's no internet connection. Trying again in {temp} seconds.", end='\r')
+                    time.sleep(1)
+                print('\n')
 
         zero_new_ads_in_a_row = 0
         total_added_findings = 0

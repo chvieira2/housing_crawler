@@ -40,6 +40,13 @@ def geocoding_address(address, sleep_time = 900, retry=True):
     while response is None:
         try:
             response = requests.get(url, headers=HEADERS)
+            if response.status_code != 200:
+                print(f'Got response code {response.status_code}')
+                time_now = time.mktime(time.localtime())
+                print(f'Sleeping for {sleep_time/60} min until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for API to be available again.')
+                time.sleep(sleep_time)
+                sleep_time += sleep_time
+                response = None
         except requests.exceptions.ConnectionError:
             print(f'Got requests.exceptions.ConnectionError')
             time_now = time.mktime(time.localtime())
@@ -48,13 +55,7 @@ def geocoding_address(address, sleep_time = 900, retry=True):
             sleep_time += sleep_time
             pass
 
-        if response.status_code != 200:
-            print(f'Got response code {response.status_code}')
-            time_now = time.mktime(time.localtime())
-            print(f'Sleeping for {sleep_time/60} min until {time.strftime("%H:%M", time.localtime(time_now + sleep_time))} to wait for API to be available again.')
-            time.sleep(sleep_time)
-            sleep_time += sleep_time
-            response = None
+
 
     # set lat and lon
     try:

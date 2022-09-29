@@ -85,9 +85,9 @@ def get_soup_from_url( url, sess = None, sleep_times = (1,2)):
             resp = sess.get(url, headers=HEADERS)
         except:
             for temp in range(15*60)[::-1]:
-                print('\n')
                 print(f"There's no internet connection. Trying again in {temp} seconds.", end='\r')
                 time.sleep(1)
+            print('\n')
 
     # Return soup object
     if resp.status_code != 200:

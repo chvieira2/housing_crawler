@@ -227,6 +227,7 @@ class CrawlWgGesucht(Crawler):
                 print('\n')
 
         # Rotate agent
+        print('Rotating agent...')
         self.rotate_user_agent()
         resp = None
         while resp is None:

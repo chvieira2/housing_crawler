@@ -512,7 +512,7 @@ class CrawlWgGesucht(Crawler):
 
             # Check if between 00 and 8am, and sleep in case it is. This is because most ads are posted during the day and there's seldom need to run overnight.
             hour_of_search = int(time.strftime(f"%H", time.localtime()))
-            while hour_of_search > 0 and hour_of_search < 8:
+            while hour_of_search > 8 and hour_of_search < 8:
                 hour_of_search = int(time.strftime(f"%H", time.localtime()))
                 for temp in range(60*60)[::-1]:
                     print(f'It is now {hour_of_search}am. Program sleeping between 00 and 08am. Waiting {temp} seconds before continuing.', end='\r')

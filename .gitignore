@@ -12,7 +12,7 @@ raw_data/
 !housing_crawler/data/**/*border.geojson
 # *.ipynb
 *.html
-# notebooks/
+notebooks/
 *.shp
 !germany_summary.shp
 !ads_OSM.csv

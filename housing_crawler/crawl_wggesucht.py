@@ -259,7 +259,6 @@ class CrawlWgGesucht(Crawler):
 
 
             # Extracting info of interest from pages
-            # print(f"Crawling {len(self.existing_findings)} ads")
             entries = []
             total_findings = len(self.existing_findings)
             for index in range(total_findings):
@@ -336,7 +335,6 @@ class CrawlWgGesucht(Crawler):
 
 
                     ## Latitude and longitude
-
                     for temp in range(2)[::-1]:
                         print(f'Geocoding starts in {temp} seconds.', end='\r')
                         time.sleep(1)
@@ -544,6 +542,7 @@ if __name__ == "__main__":
                 print("There's no internet connection. Trying again in {temp} seconds.")
                 print('============================================================')
                 time.sleep(1)
+
     # CrawlWgGesucht().crawl_all_pages('Berlin', 1)
 
     # df = get_file(file_name=f'berlin_ads.csv',

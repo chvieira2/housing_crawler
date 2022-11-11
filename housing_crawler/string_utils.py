@@ -60,7 +60,7 @@ def simplify_address(address):
     except IndexError:
         houseN = ''
     city_neigh = address.split(',')[1].split(' ')
-    city = city_neigh[1].capitalize() # [0] is a initial space in the addess name]
+    city = city_neigh[1].capitalize() # [0] is a initial space in the address name]
     neigh = ' '.join([n.capitalize() for n in city_neigh[2:]])
     final_address = ' '.join([street, houseN]) + ', ' + ', '.join([neigh, city])
     final_address = final_address.replace('str ', 'straße ').replace(' ,', ',')

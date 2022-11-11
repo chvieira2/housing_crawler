@@ -15,6 +15,7 @@ from random_user_agent.params import HardwareType, Popularity
 from config.config import ROOT_DIR
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters, simplify_address
+from housing_crawler.geocoding_addresses import geocoding_address
 
 
 def create_dir(path):
@@ -450,7 +451,6 @@ def crawl_ind_ad_page(url, sess=None):
 
     return detail_dict
 
-
 def crawl_ind_ad_page2(url, sess=None):
     '''
     Crawl a given page for a specific add and collects the information about Object (Angaben zum Objekt)
@@ -479,6 +479,14 @@ def crawl_ind_ad_page2(url, sess=None):
                 time_now = time.mktime(time.localtime())
                 print(f'Sleeping until {time.strftime("%H:%M", time.localtime(time_now + 32*60))} to wait for CAPTCH to disappear....')
                 time.sleep(32*60)
+
+    ## Check if page is not inactive
+    inactivation_alert = soup.find_all("div", {"class": "alert alert-with-icon alert-warning"})
+    if len(inactivation_alert) > 0:
+        return 'Inactive_ad'
+
+    ## Check if ad doesn't exist
+
 
     # Title
     title_row = soup.find('h1', {"class": "headline headline-detailed-view-title"})
@@ -559,23 +567,34 @@ def crawl_ind_ad_page2(url, sess=None):
 
     ## Address and ZIP code
     address = soup.find('div', {'class':'col-sm-4 mb10'}).find('a')
-    if address is not None:
-        address = [foo.strip().replace('"','').replace('\n',' ').replace('\t',' ').replace(';','') for foo in address.text.split('\n') if foo.strip() not in ['']]
-        try:
-            address_zip = int(re.findall(r'\d+', address[1])[0])
-        except:
-            address_zip = np.nan
+    address = [foo.strip().replace('"','').replace('\n',' ').replace('\t',' ').replace(';','') for foo in address.text.split('\n') if foo.strip() not in ['']]
+    try:
+        address_zip = int(re.findall(r'\d+', address[1])[0])
+    except:
+        address_zip = np.nan
 
-        city = address[1].split(' ')[1].capitalize()
-        if city == 'Frankfurt': city = 'Frankfurt am Main'
+    city = address[1].split(' ')[1].capitalize()
+    if city == 'Frankfurt': city = 'Frankfurt am Main'
 
-        address = ', '.join([address[0], str(address_zip), city])
+    address = ', '.join([address[0], str(address_zip), city])
+
+
+    ## Latitude and longitude
+    lat, lon = geocoding_address(address)
+
+
+    # Commercial offers from companies, often with several rooms in same building
+    try:
+        test_text = soup.find("div", {"class": "col-xs-8 col-sm-10"}).find("span", {"class": "label_verified"}).text
+        landlord_type = test_text.replace(' ','').replace('"','').replace('\n','').replace('\t','').replace(';','')
+    except AttributeError:
+        landlord_type = 'Private'
 
     detail_dict = {
             'id': int(url.split('.')[-2].strip()),
             'url': str(url),
             'type_offer': str(type_offer),
-            # 'landlord_type': str(landlord_type),
+            'landlord_type': str(landlord_type),
             'title': str(title),
             'price_euros': int(price),
             'size_sqm': int(size),
@@ -601,18 +620,8 @@ def crawl_ind_ad_page2(url, sess=None):
         detail_dict['available to'] = np.nan
 
 
-
-
-
     #### Further details ####
-    ## Check if page is not inactive
-    inactivation_alert = soup.find_all("div", {"class": "alert alert-with-icon alert-warning"})
-    if len(inactivation_alert) > 0:
-        detail_dict['details_searched'] = False
-        return detail_dict
     detail_dict['details_searched'] = True
-
-
     ## Cold rent
     cold_rent = soup.find('table', {'class':'table'}).find('td', {'style':'padding: 3px 8px; font-size: 1.5em; vertical-align: bottom;'})
     if cold_rent is not None:
@@ -671,6 +680,9 @@ def crawl_ind_ad_page2(url, sess=None):
         detail_dict['deposit'] = np.nan if kosten['value'] == 'n.a.' else int(kosten['value'])
     else:
         detail_dict['deposit'] = 0
+
+    # zip_code
+    detail_dict['zip_code'] = address_zip
 
 
     ## Look inside ad only if wg_detail exist (WGs only)
@@ -918,7 +930,7 @@ def crawl_ind_ad_page2(url, sess=None):
             if detail_dict.get('extras') is None:
                 detail_dict['extras'] = np.nan
 
-    return detail_dict
+    return pd.Series(detail_dict)
 
 def lat_lon_to_polygon(df_grid):
     """Receives a dataframe with coordinates columns and adds a column of respective polygons"""
@@ -991,4 +1003,4 @@ def report_best_scores(results, n_top=3):
 
 if __name__ == "__main__":
 
-    print(crawl_ind_ad_page2('https://www.wg-gesucht.de/wg-zimmer-in-Berlin-Oberschoeneweide.9725390.html'))
+    print(crawl_ind_ad_page2('https://www.wg-gesucht.de/wg-zimmer-in-Hannover-Sudstadt.9060306.html'))

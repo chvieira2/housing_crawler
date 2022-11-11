@@ -245,7 +245,7 @@ class CrawlWgGesucht(Crawler):
             # Obtaining pages
             # No need for time.sleep here as there's already one before calling BeautifulSoup
             self.parse_urls(location_name = location_name, page_number= page_number,
-                        filters = filters, sess=sess)
+                            filters = filters, sess=sess)
 
 
             # Obtain older ads, or create empty table if there are no older ads.

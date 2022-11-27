@@ -13,7 +13,6 @@ __status__ = "Production"
 from config.config import ROOT_DIR
 
 
-# from sqlalchemy import null
 import time
 import streamlit as st
 from streamlit_folium import st_folium

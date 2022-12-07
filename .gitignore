@@ -15,7 +15,7 @@ raw_data/
 notebooks/
 *.shp
 !germany_summary.shp
-!ads_OSM.csv
+!*ads_OSM.csv
 .shx
 .prj
 .dbf

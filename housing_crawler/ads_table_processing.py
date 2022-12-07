@@ -750,7 +750,7 @@ def imputing_values(ads_df):
 
 def process_ads_tables(year,month):
 
-    all_ads = get_file(file_name=f'''{str(year)}{str(month)}_ads_encoded.csv''', local_file_path='housing_crawler/data')
+    all_ads = get_file(file_name=f'''{str(year)}{str(month)}_ads_encoded.csv''', local_file_path='raw_data')
 
     df_processed = prepare_data(ads_df = all_ads)
     df_processed = filter_out_bad_entries(ads_df = df_processed, country = 'Germany',
@@ -763,7 +763,7 @@ def process_ads_tables(year,month):
 
     df_processed = df_processed.drop_duplicates(subset = ['id'], keep='first')
 
-    save_file(df_processed, file_name=f'''{year}{month}_ads_OSM.csv''', local_file_path=f'housing_crawler/data')
+    save_file(df_processed, file_name=f'''{year}{month}_ads_OSM.csv''', local_file_path=f'raw_data')
 
 
 if __name__ == "__main__":

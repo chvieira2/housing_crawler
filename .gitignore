@@ -2,7 +2,7 @@
 .coverage
 .ipynb_checkpoints
 .DS_Store
-raw_data/
+# raw_data/
 *.csv
 *.pkl
 **/__pycache__/

@@ -139,7 +139,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht):
 
 
 
-    save_file(all_ads_df, f'{year}{month}_ads_encoded.csv', local_file_path='housing_crawler/data')
+    save_file(all_ads_df, f'{year}{month}_ads_encoded.csv', local_file_path='raw_data')
 
     process_ads_tables(year,month)
 

@@ -20,6 +20,7 @@ import datetime
 from dateutil.relativedelta import relativedelta
 
 import pandas as pd
+pd.options.mode.chained_assignment = None  # default='warn'. Needed to remove SettingWithCopyWarning warning when assigning new value to dataframe column
 import numpy as np
 import plotly.express as px
 import matplotlib.pyplot as plt
@@ -92,16 +93,15 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 #----Functions------
 @st.cache
-def get_data(file_name_tag='ads_OSM.csv', local_file_path=f'housing_crawler/data'):
+def get_data(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
     """
     Method to get data from local environment and return a unified dataframe
 
     """
 
     csvs_list = []
-
-    for year in ['2022']:#,'2023']:
-        for month in ['07','08','09','10','11','12']:
+    for year in ['2022','2023']:
+        for month in ['01','02','03','04','05','06','07','08','09','10','11','12']:
 
             file_name = f'{year}{month}_{file_name_tag}'
             local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'

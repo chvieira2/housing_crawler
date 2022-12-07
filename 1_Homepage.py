@@ -25,7 +25,6 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from housing_crawler.ads_table_processing import get_processed_ads_table
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.string_utils import standardize_characters
 
@@ -93,15 +92,26 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 #----Functions------
 @st.cache
-def get_data(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data'):
+def get_data(file_name_tag='ads_OSM.csv', local_file_path=f'housing_crawler/data'):
     """
-    Method to get data (or a portion of it) from local environment and return a dataframe
+    Method to get data from local environment and return a unified dataframe
 
     """
-    # try:
-    local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'
-    df = pd.read_csv(local_path)
-    return df
+
+    csvs_list = []
+
+    for year in ['2022']:#,'2023']:
+        for month in ['07','08','09','10','11','12']:
+
+            file_name = f'{year}{month}_{file_name_tag}'
+            local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'
+            try:
+                df = pd.read_csv(local_path)
+                csvs_list.append(df)
+            except FileNotFoundError:
+                pass
+
+    return pd.concat(csvs_list)
 
 def filter_original_data(df,city,time_period):
     ## Format dates properly

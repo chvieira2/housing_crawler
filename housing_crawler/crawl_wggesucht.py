@@ -1,6 +1,8 @@
 # from cmath import isnan
 import re
 import time
+import datetime
+from dateutil.relativedelta import relativedelta
 import requests
 # import json
 # import logging
@@ -160,42 +162,42 @@ class CrawlWgGesucht(Crawler):
 
             self.existing_findings = self.existing_findings + (new_findings)
 
-    def save_df(self, df, location_name, old_df = []):
+    def update_database(self, df, location_name, df_previous_version = []):
         ## First obtain older ads for updating table
-        if len(old_df) == 0:
+        if len(df_previous_version) == 0:
             try:
-                old_df = get_file(file_name=f'{location_name}_ads.csv',
+                df_previous_version = get_file(file_name=f'''{datetime.date.today().strftime('%Y%m')}_{location_name}_ads.csv''',
                                 local_file_path=f'housing_crawler/data/{location_name}/Ads')
                 # print('Obtained older ads')
             except FileNotFoundError:
-                old_df = pd.DataFrame(columns = df.columns)
-                print('No older ads found. Creating brand new csv.')
+                df_previous_version = pd.DataFrame(columns = df.columns)
+                print('No older ads found for this month. Creating brand new csv.')
 
         # Exclude weird ads without an id number from newer ads
         df = df[df['id'] != 0]
 
         # Make sure new df and old df have same columns
-        for new_column in old_df.columns:
+        for new_column in df_previous_version.columns:
             if new_column not in df.columns:
                 df[new_column] = np.nan
         for new_column in df.columns:
-            if new_column not in old_df.columns:
-                old_df[new_column] = np.nan
+            if new_column not in df_previous_version.columns:
+                df_previous_version[new_column] = np.nan
 
         # Add new ads to older list and discard copies. Keep = last is important because wg-gesucht keeps on refreshing the post date of some ads (private paid ads?). With keep = last I keep the very first entry only
         # This snippet is probably unnecessary as duplicates aren't searched anymore and is left over from before I fixed the bug when duplicates were still searched
-        new_df = pd.concat([df,old_df]).drop_duplicates(subset='id', keep="last").reset_index(drop=True)
+        new_df = pd.concat([df,df_previous_version]).drop_duplicates(subset='id', keep="last").reset_index(drop=True)
 
 
 
-        print(f'''{len(new_df)-len(old_df)} new ads were added to the list.\n
-                    There are now {len(new_df)} ads in {location_name}_ads.csv.''')
+        print(f'''{len(new_df)-len(df_previous_version)} new ads were added to the list.\n
+                    There are now {len(new_df)} ads in {datetime.date.today().strftime('%Y%m')}_{location_name}_ads.csv.''')
         print('\n')
 
         # Save updated list
-        save_file(df = new_df, file_name=f'{location_name}_ads.csv',
+        save_file(df = new_df, file_name=f'''{datetime.date.today().strftime('%Y%m')}_{location_name}_ads.csv''',
                   local_file_path=f'housing_crawler/data/{location_name}/Ads')
-        return len(new_df)-len(old_df)
+        return len(new_df)-len(df_previous_version)
 
     def crawl_all_pages(self, location_name, number_pages,
                     filters = ["wg-zimmer","1-zimmer-wohnungen","wohnungen","haeuser"],
@@ -251,11 +253,19 @@ class CrawlWgGesucht(Crawler):
             # Obtain older ads, or create empty table if there are no older ads.
             # This snippet needs to run inside the page_number loop so it's constantly updated with previous ads
             try:
-                old_df = get_file(file_name=f'{standardize_characters(location_name)}_ads.csv',
-                                local_file_path=f'housing_crawler/data/{standardize_characters(location_name)}/Ads')
-                print(f'Loaded previous {standardize_characters(location_name)}_ads.csv with {len(old_df)} ads in total')
+                previous_month_df = get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=1)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
+                                local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads''')
             except FileNotFoundError:
-                old_df=pd.DataFrame({'url':[]})
+                previous_month_df=pd.DataFrame({'url':[]})
+
+            try:
+                current_month_df = get_file(file_name=f'''{datetime.date.today().strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
+                                local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads''')
+                print(f'Loaded this months {standardize_characters(location_name)}_ads.csv with {len(current_month_df)} ads in total')
+            except FileNotFoundError:
+                current_month_df=pd.DataFrame({'url':[]})
+
+            old_df = pd.concat([current_month_df,previous_month_df], axis = 0)
 
 
             # Extracting info of interest from pages
@@ -275,7 +285,7 @@ class CrawlWgGesucht(Crawler):
 
 
                 # Save time by not parsing old ads
-                # To check if add is old, check if the url/id already exist in the table
+                # To check if add is old, check if the url/id already exist in the old_df table
                 if ad_id == '':
                     pass
                 elif (ad_url in list(old_df['url'])) or ('asset_id' in ad_url) or (ad_id in list(old_df['id']) or (int(ad_id) in list(old_df['id']))):
@@ -283,7 +293,7 @@ class CrawlWgGesucht(Crawler):
                 else:
                     # Add sleep time to avoid multiple sequencial searches in short time that would be detected by the site
                     # No sleep between searches is needed because wg-gesucht CAPTCH seems to be triggered by total number of accesses
-                    for temp in range(20)[::-1]:
+                    for temp in range(10)[::-1]:
                         print(f'Waiting {temp} seconds before continuing.', end='\r')
                         time.sleep(1)
                     print('\n')
@@ -455,7 +465,7 @@ class CrawlWgGesucht(Crawler):
 
             if len(df)>0:
                 # Save info as df in csv format
-                n_ads_added = self.save_df(df=df, location_name=standardize_characters(location_name), old_df=old_df)
+                n_ads_added = self.update_database(df=df, location_name=standardize_characters(location_name), df_previous_version=current_month_df)
             else:
                 n_ads_added = 0
                 print('===== No new entries were found. =====')
@@ -473,10 +483,10 @@ class CrawlWgGesucht(Crawler):
                 break
 
         print('\n')
-        print(f'========= {total_added_findings} ads in total were added to {location_name}_ads.csv. There are now {len(old_df)} ads in total. =========')
+        print(f'''========= {total_added_findings} ads in total were added to {datetime.date.today().strftime('%Y%m')}_{location_name}_ads.csv. =========''')
         print('\n')
 
-    def long_search(self, day_stop_search = '01.01.2023', pages_per_search = 100, start_search_from_index = 0):
+    def long_search(self, day_stop_search = '01.01.2024', pages_per_search = 100, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''
@@ -543,11 +553,4 @@ if __name__ == "__main__":
                 print('============================================================')
                 time.sleep(1)
 
-    # CrawlWgGesucht().crawl_all_pages('Berlin', 1)
-
-    # df = get_file(file_name=f'berlin_ads.csv',
-    #                         local_file_path=f'housing_crawler/data/berlin/Ads')
-
-    # CrawlWgGesucht().save_df(df, 'berlin')
-
-    # print(crawl_ind_ad_page(url = 'https://www.wg-gesucht.de/wohnungen-in-Berlin-Reinickendorf.9530155.html'))
+    # print(datetime.date.today().strftime('%Y%m'))

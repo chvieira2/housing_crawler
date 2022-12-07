@@ -109,37 +109,43 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht):
     This function iterates through all folders of each city and saves the corresponding csvs into a single csv file.
     '''
 
-    csvs_list = []
-    for city in cities:
-        city = standardize_characters(city)
-        file_name = f'{city}_ads.csv'
-        try:
-            df_city = get_file(file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
-        except FileNotFoundError:
-            print(f'{file_name} was not found')
-            pass
 
-        # Update older searches with newer feautures, like geocoding of addresses or collecting ad specific info
-        df_city = fix_older_table(df_city, city=city, file_name=file_name)
+    for year in ['2022']:#,'2023']:
+        for month in ['07','08','09','10','11','12']:
+            csvs_list = []
+            for city in cities:
+                city = standardize_characters(city)
+
+                file_name = f'{year}{month}_{city}_ads.csv'
+                try:
+                    df_city = get_file(file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
+                except FileNotFoundError:
+                    print(f'{file_name} was not found')
+                    pass
+
+                # Update older searches with newer feautures, like geocoding of addresses or collecting ad specific info
+                df_city = fix_older_table(df_city, city=city, file_name=file_name)
 
 
-        save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
+                save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
 
-        csvs_list.append(df_city)
+                csvs_list.append(df_city)
 
 
-    all_ads_df = pd.concat(csvs_list)
-    print(f'======= Csvs were collected. There are {len(all_ads_df)} ads in total. =======')
+            all_ads_df = pd.concat(csvs_list)
+            print(f'======= {len(csvs_list)} csvs were collected. There are {len(all_ads_df)} ads in total this month. =======')
 
-    # Get old all_Ads
-    try:
-        old_all_ads_df = get_file(file_name='all_encoded.csv', local_file_path=f'housing_crawler/data')
-        all_ads_df = all_ads_df[all_ads_df['id'] not in old_all_ads_df['id']]
-        save_file(all_ads_df, 'all_encoded.csv', local_file_path='housing_crawler/data')
-    except:
-        save_file(all_ads_df, 'all_encoded.csv', local_file_path='housing_crawler/data')
+            # Get old all_Ads
+            try:
+                old_all_ads_df = get_file(file_name=f'{year}{month}_all_encoded.csv', local_file_path=f'housing_crawler/data')
 
-def long_search(day_stop_search = '01.01.2023', start_search_from_index = 0):
+                all_ads_df = all_ads_df[all_ads_df['id'] not in old_all_ads_df['id']]
+
+                save_file(all_ads_df, f'{year}{month}_all_encoded.csv', local_file_path='housing_crawler/data')
+            except:
+                save_file(all_ads_df, f'{year}{month}_all_encoded.csv', local_file_path='housing_crawler/data')
+
+def long_search(day_stop_search = '01.01.2024', start_search_from_index = 0):
     '''
     This method runs the geocoding for ads until a defined date and saves results in .csv file.
     '''

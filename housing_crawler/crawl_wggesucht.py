@@ -241,6 +241,19 @@ class CrawlWgGesucht(Crawler):
                     time.sleep(1)
                 print('\n')
 
+        # Obtain older ads, or create empty table if there are no older ads.
+        try:
+            previous_3_months_df = pd.concat([
+                get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=1)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
+                            local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads'''),
+                get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=2)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
+                            local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads'''),
+                get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=3)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
+                            local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads'''),
+            ])
+        except FileNotFoundError:
+            previous_3_months_df=pd.DataFrame({'url':[]})
+
         zero_new_ads_in_a_row = 0
         total_added_findings = 0
         for page_number in range(number_pages):
@@ -249,15 +262,7 @@ class CrawlWgGesucht(Crawler):
             self.parse_urls(location_name = location_name, page_number= page_number,
                             filters = filters, sess=sess)
 
-
-            # Obtain older ads, or create empty table if there are no older ads.
-            # This snippet needs to run inside the page_number loop so it's constantly updated with previous ads
-            try:
-                previous_month_df = get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=1)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
-                                local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads''')
-            except FileNotFoundError:
-                previous_month_df=pd.DataFrame({'url':[]})
-
+            # This snippet needs to run inside the page_number loop so it's constantly updated with previous ads in the same month
             try:
                 current_month_df = get_file(file_name=f'''{datetime.date.today().strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
                                 local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads''')
@@ -265,7 +270,7 @@ class CrawlWgGesucht(Crawler):
             except FileNotFoundError:
                 current_month_df=pd.DataFrame({'url':[]})
 
-            old_df = pd.concat([current_month_df,previous_month_df], axis = 0)
+            old_df = pd.concat([current_month_df,previous_3_months_df], axis = 0)
 
 
             # Extracting info of interest from pages

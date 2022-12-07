@@ -32,8 +32,8 @@ def prepare_data(ads_df):
 
     ## Preapare data types
     ads_df['published_at'] = ads_df['published_at'].astype('Int64') # Int64 can take NaN while int or int64 won't
+    ads_df['published_on'] = pd.to_datetime(ads_df['published_on']).dt.strftime('%d.%m.%Y') # I need to correct format for some unknown reason (same column with multiple format 01.12.2022 and 2022-12-01)
     ads_df['published_on'] = pd.to_datetime(ads_df['published_on'], format = "%d.%m.%Y")
-    # ads_df['published_at'] = pd.to_datetime(ads_df['published_at'], format = "%H")
     ads_df['available_from'] = pd.to_datetime(ads_df['available_from'], format = "%d.%m.%Y")
     ads_df['available_to'] = pd.to_datetime(ads_df['available_to'], format = "%d.%m.%Y")
 
@@ -218,30 +218,32 @@ def prepare_data(ads_df):
     return ads_df
 
 def filter_out_bad_entries(ads_df, country = 'Germany',
-                          date_max = None, date_min = None, date_format = "%d.%m.%Y"):
+                          date_max = None, date_min = None, date_format = "%d.%m.%Y",
+                          filter_time = False):
 
-    ## Select offers inside a time period
-    try:
-        # Filter ads in between desired dates. Standard is to use ads from previous 3 months
-        if date_max == None or date_max == 'today':
-            date_max = pd.to_datetime(time.strftime(date_format, time.localtime()), format = date_format)
-        elif isinstance(date_max,str):
-            date_max = pd.to_datetime(date_max, format = date_format)
+    if filter_time: # This temporal selection has to be removed for working with files per month
+        ## Select offers inside a time period
+        try:
+            # Filter ads in between desired dates. Standard is to use ads from previous 3 months
+            if date_max == None or date_max == 'today':
+                date_max = pd.to_datetime(time.strftime(date_format, time.localtime()), format = date_format)
+            elif isinstance(date_max,str):
+                date_max = pd.to_datetime(date_max, format = date_format)
 
-        if date_min == None:
-            date_min = datetime.date.today() + relativedelta(months=-3)
-            date_min = pd.to_datetime(date_min.strftime(date_format), format = date_format)
-        elif isinstance(date_min,str):
-            date_min = pd.to_datetime(date_min, format = date_format)
+            if date_min == None:
+                date_min = datetime.date.today() + relativedelta(months=-3)
+                date_min = pd.to_datetime(date_min.strftime(date_format), format = date_format)
+            elif isinstance(date_min,str):
+                date_min = pd.to_datetime(date_min, format = date_format)
 
-        ads_df['temp_col'] = ads_df['published_on'].apply(lambda x: x >= date_min and x <= date_max)
+            ads_df['temp_col'] = ads_df['published_on'].apply(lambda x: x >= date_min and x <= date_max)
 
-        ads_df = ads_df[ads_df['temp_col']].drop(columns=['temp_col'])
-    except ValueError:
-        print('Date format was wrong. Please input a date in the format 31.12.2020 (day.month.year), or specify the date format you want to use using the "date_format" option.')
+            ads_df = ads_df[ads_df['temp_col']].drop(columns=['temp_col'])
+        except ValueError:
+            print('Date format was wrong. Please input a date in the format 31.12.2020 (day.month.year), or specify the date format you want to use using the "date_format" option.')
 
-    # Searches before August are not so useful. Remove them here
-    ads_df = ads_df[ads_df['published_on'] >= '2022-08-01']
+        # Searches before August are not so useful. Remove them here
+        # ads_df = ads_df[ads_df['published_on'] >= '2022-08-01']
 
 
 
@@ -306,22 +308,22 @@ def filter_out_bad_entries(ads_df, country = 'Germany',
     flathouse_df['log_price_per_sqm_cold'] = np.log2(flathouse_df['price_per_sqm_cold'])
 
 
-    ## Remove outliers identified above X standard deviations
-    X=3
-    mean_wg_df = np.mean(wg_df['log_price_per_sqm_cold'])
-    std_wg_df = np.std(wg_df['log_price_per_sqm_cold'],ddof=1)
-    wg_df = wg_df[wg_df['log_price_per_sqm_cold']<=mean_wg_df+(X*std_wg_df)]
-    wg_df = wg_df[wg_df['log_price_per_sqm_cold']>=mean_wg_df-(X*std_wg_df)]
+    # ## Remove outliers identified above X standard deviations
+    # X=3
+    # mean_wg_df = np.mean(wg_df['log_price_per_sqm_cold'])
+    # std_wg_df = np.std(wg_df['log_price_per_sqm_cold'],ddof=1)
+    # wg_df = wg_df[wg_df['log_price_per_sqm_cold']<=mean_wg_df+(X*std_wg_df)]
+    # wg_df = wg_df[wg_df['log_price_per_sqm_cold']>=mean_wg_df-(X*std_wg_df)]
 
-    mean_singleroom_df = np.mean(singleroom_df['log_price_per_sqm_cold'])
-    std_singleroom_df = np.std(singleroom_df['log_price_per_sqm_cold'],ddof=1)
-    singleroom_df = singleroom_df[singleroom_df['log_price_per_sqm_cold']<=mean_singleroom_df+(X*std_singleroom_df)]
-    singleroom_df = singleroom_df[singleroom_df['log_price_per_sqm_cold']>=mean_singleroom_df-(X*std_singleroom_df)]
+    # mean_singleroom_df = np.mean(singleroom_df['log_price_per_sqm_cold'])
+    # std_singleroom_df = np.std(singleroom_df['log_price_per_sqm_cold'],ddof=1)
+    # singleroom_df = singleroom_df[singleroom_df['log_price_per_sqm_cold']<=mean_singleroom_df+(X*std_singleroom_df)]
+    # singleroom_df = singleroom_df[singleroom_df['log_price_per_sqm_cold']>=mean_singleroom_df-(X*std_singleroom_df)]
 
-    mean_flathouse_df = np.mean(flathouse_df['log_price_per_sqm_cold'])
-    std_flathouse_df = np.std(flathouse_df['log_price_per_sqm_cold'],ddof=1)
-    flathouse_df = flathouse_df[flathouse_df['log_price_per_sqm_cold']<=mean_flathouse_df+(X*std_flathouse_df)]
-    flathouse_df = flathouse_df[flathouse_df['log_price_per_sqm_cold']>=mean_flathouse_df-(X*std_flathouse_df)]
+    # mean_flathouse_df = np.mean(flathouse_df['log_price_per_sqm_cold'])
+    # std_flathouse_df = np.std(flathouse_df['log_price_per_sqm_cold'],ddof=1)
+    # flathouse_df = flathouse_df[flathouse_df['log_price_per_sqm_cold']<=mean_flathouse_df+(X*std_flathouse_df)]
+    # flathouse_df = flathouse_df[flathouse_df['log_price_per_sqm_cold']>=mean_flathouse_df-(X*std_flathouse_df)]
 
 
     # Concatenate all ads together to re-form ads_df
@@ -667,10 +669,6 @@ def feature_engineering(ads_df):
 
     ads_df.drop('day_week_int', axis=1, inplace=True)
 
-
-
-
-    save_file(ads_df, file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
     return ads_df
 
 def imputing_values(ads_df):
@@ -750,32 +748,28 @@ def imputing_values(ads_df):
 
     return ads_df
 
-def get_processed_ads_table(update_table=True):
-    # try:
-    #     if ~update_table:
-    #         return get_file(file_name='ads_OSM.csv', local_file_path=f'housing_crawler/data')
-    # except FileNotFoundError:
-        all_ads = get_file(file_name='all_encoded.csv', local_file_path='housing_crawler/data')
+def process_ads_tables(year,month):
 
-        df_processed = prepare_data(ads_df = all_ads)
-        df_processed = filter_out_bad_entries(ads_df = df_processed, country = 'Germany',
-                            date_max = None, date_min = None, date_format = "%d.%m.%Y")
+    all_ads = get_file(file_name=f'''{str(year)}{str(month)}_ads_encoded.csv''', local_file_path='housing_crawler/data')
 
-        df_processed = transform_columns_into_numerical(ads_df = df_processed)
-        df_processed = split_cat_columns(ads_df = df_processed)
-        df_processed = feature_engineering(ads_df = df_processed)
-        df_processed = imputing_values(ads_df = df_processed)
+    df_processed = prepare_data(ads_df = all_ads)
+    df_processed = filter_out_bad_entries(ads_df = df_processed, country = 'Germany',
+                        date_max = None, date_min = None, date_format = "%d.%m.%Y")
 
-        df_processed = df_processed.drop_duplicates(subset = ['id'], keep='first')
+    df_processed = transform_columns_into_numerical(ads_df = df_processed)
+    df_processed = split_cat_columns(ads_df = df_processed)
+    df_processed = feature_engineering(ads_df = df_processed)
+    df_processed = imputing_values(ads_df = df_processed)
 
-        return df_processed
+    df_processed = df_processed.drop_duplicates(subset = ['id'], keep='first')
+
+    save_file(df_processed, file_name=f'''{year}{month}_ads_OSM.csv''', local_file_path=f'housing_crawler/data')
 
 
 if __name__ == "__main__":
 
-    df_processed = get_processed_ads_table()
+    process_ads_tables(2022,12)
 
-    print(df_processed.info())
 
 
     # sorted(df_processed.columns, reverse=False)

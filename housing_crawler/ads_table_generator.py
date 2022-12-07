@@ -15,6 +15,7 @@ from housing_crawler.geocoding_addresses import geocoding_address, fix_weird_add
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.utils import save_file, get_file, crawl_ind_ad_page
 from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters, simplify_address
+from ads_table_processing import process_ads_tables
 
 def fix_older_table(df_city, file_name, city,
                       sess = None, save_after = 3):
@@ -74,7 +75,7 @@ def fix_older_table(df_city, file_name, city,
 
 
         ### Geocoding
-        ## Geocoding is necessary because older searches did not include it. For newer searches this is redundant.
+        ## Geocoding is necessary because searches before Aug 2022 did not include it. For newer searches this is redundant.
 
         address = df_city['address'].iloc[index_row]
         address = fix_weird_address(address).strip().replace('  ', ' ').replace(' ,', ',')
@@ -109,41 +110,38 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht):
     This function iterates through all folders of each city and saves the corresponding csvs into a single csv file.
     '''
 
+    year = time.strftime(f"%Y", time.localtime())
+    month = time.strftime(f"%m", time.localtime())
+    # for year in ['2022']:#,'2023']:
+    #     for month in ['07','08','09','10','11','12']:
+    csvs_list = []
+    for city in cities:
+        city = standardize_characters(city)
 
-    for year in ['2022']:#,'2023']:
-        for month in ['07','08','09','10','11','12']:
-            csvs_list = []
-            for city in cities:
-                city = standardize_characters(city)
+        file_name = f'{year}{month}_{city}_ads.csv'
+        try:
+            df_city = get_file(file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
+        except FileNotFoundError:
+            print(f'{file_name} was not found')
+            pass
 
-                file_name = f'{year}{month}_{city}_ads.csv'
-                try:
-                    df_city = get_file(file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
-                except FileNotFoundError:
-                    print(f'{file_name} was not found')
-                    pass
-
-                # Update older searches with newer feautures, like geocoding of addresses or collecting ad specific info
-                df_city = fix_older_table(df_city, city=city, file_name=file_name)
-
-
-                save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
-
-                csvs_list.append(df_city)
+        # Update older searches with newer feautures, like geocoding of addresses or collecting ad specific info
+        df_city = fix_older_table(df_city, city=city, file_name=file_name)
 
 
-            all_ads_df = pd.concat(csvs_list)
-            print(f'======= {len(csvs_list)} csvs were collected. There are {len(all_ads_df)} ads in total this month. =======')
+        save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
 
-            # Get old all_Ads
-            try:
-                old_all_ads_df = get_file(file_name=f'{year}{month}_all_encoded.csv', local_file_path=f'housing_crawler/data')
+        csvs_list.append(df_city)
 
-                all_ads_df = all_ads_df[all_ads_df['id'] not in old_all_ads_df['id']]
 
-                save_file(all_ads_df, f'{year}{month}_all_encoded.csv', local_file_path='housing_crawler/data')
-            except:
-                save_file(all_ads_df, f'{year}{month}_all_encoded.csv', local_file_path='housing_crawler/data')
+    all_ads_df = pd.concat(csvs_list)
+    print(f'======= {len(csvs_list)} csvs were collected. There are {len(all_ads_df)} ads in total the month: {year}{month}. =======')
+
+
+
+    save_file(all_ads_df, f'{year}{month}_ads_encoded.csv', local_file_path='housing_crawler/data')
+
+    process_ads_tables(year,month)
 
 def long_search(day_stop_search = '01.01.2024', start_search_from_index = 0):
     '''

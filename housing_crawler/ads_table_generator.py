@@ -105,7 +105,7 @@ def fix_older_table(df_city, file_name, city,
     print(f'Finished geocoding addresses for {capitalize_city_name(german_characters(city))}. There are {len(df_city)} ads in {file_name}.')
     return df_city
 
-def collect_cities_csvs(cities = dict_city_number_wggesucht):
+def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = True):
     '''
     This function iterates through all folders of each city and saves the corresponding csvs into a single csv file.
     '''
@@ -141,7 +141,8 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht):
 
     save_file(all_ads_df, f'{year}{month}_ads_encoded.csv', local_file_path='raw_data')
 
-    process_ads_tables(year,month)
+    if create_OSM_table:
+        process_ads_tables(all_ads_df)
 
 def long_search(day_stop_search = '01.01.2024', start_search_from_index = 0):
     '''

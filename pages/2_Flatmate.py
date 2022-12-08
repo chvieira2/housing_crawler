@@ -13,6 +13,15 @@ __status__ = "Production"
 
 import streamlit as st
 from housing_crawler.params import dict_city_number_wggesucht
+from housing_crawler.utils import crawl_ind_ad_page2,get_grid_polygons_all_cities
+from housing_crawler.ads_table_processing import process_ads_tables
+from housing_crawler.geocoding_addresses import geocoding_address
+
+import pandas as pd
+import numpy as np
+import time
+import pickle
+from config.config import ROOT_DIR
 
 
 #-----------------------page configuration-------------------------
@@ -92,9 +101,9 @@ with st.expander("I want to know the market price for my room in a WG"):
                     """)
             col1, col2, col3, col4 = st.columns(4)
             col1.selectbox(label="City*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0, key='city')
-            col2.text_input("Street and house number*", value="", key='address', max_chars = 100)
-            col3.text_input("Neighborhood*", value="", key='neighborhood', max_chars = 100)
-            col4.text_input("Zip code*", value="", key='zip_code', max_chars = 20)
+            col2.text_input("Street and house number*", value="Example Str. 15", key='address', max_chars = 100)
+            col3.text_input("Neighborhood", value="", key='neighborhood', max_chars = 100)
+            col4.text_input("Zip code*", value="12345", key='zip_code', max_chars = 20)
 
         placeholder_map = st.empty()
         with placeholder_map.container():
@@ -163,19 +172,73 @@ with st.expander("I want to know the market price for my room in a WG"):
             col2.multiselect(label='Furniture', options=['Furnished', 'Partly furnished'], default=None, key='furniture')
             col2.multiselect(label='Floor type', options=['Floor boards', 'Parquet', 'Laminate', 'Carpet', 'Tiles', 'PVC', 'Underfloor heating'], default=None, key='floor_type')
             col3.multiselect(label='TV', options=['Cable', 'Satellite'], default=None, key='tv')
-            col3.multiselect(label='Miscellaneous', options=['Washing machine', 'Dishwasher', 'Terrace', 'Balcony', 'Garden', 'Shared garden', 'Basement', 'Elevator', 'Pets allowed', 'Bicycle storage'], default=None, key='miscellaneous')
+            col3.multiselect(label='Miscellaneous', options=['Washing machine', 'Dishwasher', 'Terrace', 'Balcony', 'Garden', 'Shared garden', 'Basement', 'Elevator', 'Pets allowed', 'Bicycle storage'], default=None, key='extras')
 
         "---"
         submitted_form = st.form_submit_button("Submit form")
 
+
+
+
         if submitted_form:
+            full_address = str(st.session_state.address) + ', ' + str(st.session_state.zip_code) + ', ' + str(st.session_state.city)
+
+            lat, lon = geocoding_address(full_address)
+
+            detail_dict = {
+            'id': [''],
+            'url': [''],
+            'type_offer': ['WG'],
+            'landlord_type': ['Private'],
+            'title': [''],
+            'price_euros': [np.nan],
+            'size_sqm': [int(st.session_state.room_size)],
+            'available_rooms': [1],
+            'WG_size': [int(st.session_state.total_flat_size)],
+            'available_spots_wg': [1],
+            'male_flatmates': [int(st.session_state.male_flatmates)],
+            'female_flatmates': [int(st.session_state.female_flatmates)],
+            'diverse_flatmates': [int(st.session_state.diverse_flatmates)],
+            'published_on': [str(time.strftime(f"%d.%m.%Y", time.localtime()))],
+            'published_at': [int(time.strftime(f"%H", time.localtime()))],
+            'address': [full_address],
+            'city': [str(st.session_state.city)],
+            'crawler': ['WG-Gesucht'],
+            'latitude': [float(lat)],
+            'longitude': [float(lon)],
+            'available from': [str(time.strftime(f"%d.%m.%Y", time.localtime()))],
+            'available to': [np.nan]
+                }
+
+
+            # building_type
+            # floor
+            # parking
+            # distance_public_transport
+            # barrier_free
+            # schufa_requested
+            # min_age_flatmates
+            # max_age_flatmates
+            # smoking
+            # wg_type
+            # languages
+            # energy_certificate
+            # energy_source
+            # building_year
+            # energy_efficiency
+            # heating
+            # internet
+            # furniture
+            # floor_type
+            # extras
+
             st.markdown("""
                     ### Page under construction.
                     """, unsafe_allow_html=True)
 
 with st.expander("I found an ad in wg-gesucht.de and want to know if the price follows the market"):
     with st.form("entry_url", clear_on_submit=False):
-        st.text_input("Paste here the link to a wg-gesucht.de ad. The link should look like this: 'https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html'", value="", key='url', max_chars = 250)
+        st.text_input("Paste here the link to a wg-gesucht.de ad. The link should look like this: 'https://www.wg-gesucht.de/wg-zimmer-in-City.1234567.html'", value="", key='url', max_chars = 250)
 
         "---"
         submitted_url = st.form_submit_button("Submit url")
@@ -185,211 +248,71 @@ with st.expander("I found an ad in wg-gesucht.de and want to know if the price f
             url_ok = False
             if url == '':
                 st.markdown("""
-                    Please submit a link to the page of the ad of interest.
+                    Please submit the link to the page of the ad of your interest.
                     """, unsafe_allow_html=True)
                 url_ok = False
-            if ~url.startswith('https://www.'):
-                url = 'https://www.' + url
+            elif 'wg-gesucht.de' in url:
                 url_ok = True
-            elif ~url.startswith('https://'):
-                url = 'https://' + url
-                url_ok = True
-            if 'wg-gesucht.de' not in url:
+            else:
                 st.markdown("""
                     The link must be from wg-gesucht.de
                     """, unsafe_allow_html=True)
-                url_ok = False
+
 
             if url_ok:
-                st.text(f'Searching for {url}')
-                st.markdown("""
-                        ### Page under construction.
-                        """, unsafe_allow_html=True)
+                st.markdown(f'Analysing {url}', unsafe_allow_html=True)
+
+                ## Process url to obtain table for prediction
+                ad_df = crawl_ind_ad_page2(url)
+
+                @st.cache(allow_output_mutation=True)
+                def get_df_feats():
+                    return get_grid_polygons_all_cities()
+
+                try:
+                    ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats = get_df_feats())
+
+                    ## Load model for prediction (locally or from Github)
+                    trained_model = pickle.load(open(f'{ROOT_DIR}/model/PredPipeline_WG_allcities_price_per_sqm_cold.pkl','rb'))
+                    # trained_model = pd.read_pickle('https://github.com/user/mydirectoryname/raw/main/Results/mypicklefile')
+
+                    ## Make predictions
+                    pred_price_sqm = float(trained_model.predict(ad_df_processed))
+                    cold_rent_pred = round(float(pred_price_sqm*ad_df_processed['size_sqm']),2)
+                    warm_rent_pred =  round(float(cold_rent_pred + ad_df_processed['mandatory_costs_euros'] + ad_df_processed['extra_costs_euros']),2)
+
+
+                    ## Ad evaluation
+                    ad_evaluation = 'over' if float(ad_df_processed['price_euros']) > warm_rent_pred*1.2 else 'under' if float(ad_df_processed['price_euros']) < warm_rent_pred*1.2 else 'fair'
+
+
+                    if ad_evaluation == 'over':
+                        ad_evaluation = f"***OVERPRICED***. Even after taking the margin of error in consideration, the rent price in this ad ({round(float(ad_df_processed['price_euros']),2)}€) is significantly above the price predicted by our model"
+                    elif ad_evaluation == 'fair':
+                        ad_evaluation = f"***FAIRLY PRICED***. Taking the margin of error in consideration, the rent price in this ad ({round(float(ad_df_processed['price_euros']),2)}€) is within the price range predicted by our model"
+                    elif ad_evaluation == 'under':
+                        ad_evaluation = f"***UNDERPRICED***. Even after taking the margin of error in consideration, the rent price in this ad ({round(float(ad_df_processed['price_euros']),2)}€) is significantly below the price predicted by our model"
+
+                    # Display predictions
+                    st.markdown(f"""
+                                The predicted rent for this offer is: ***{warm_rent_pred}***€. This prediction is composed of the predicted cold rent ({cold_rent_pred}€), plus mandatory and extra costs indicated in the ad.
+
+                                The offer in this ad is priced at {round(float(ad_df_processed['price_euros']),2)}€ (warm rent). We consider this price to be {ad_evaluation}.
+                                """, unsafe_allow_html=True)
+
+
+                except Exception as err:
+                    st.markdown(f"""
+                            The analysis failed. Most common reasons for analysis to fail are wrong entries in the origianl ad itself. Examples of entries in the ad that lead to failed analysis:
+                            - Rent price too low or too high
+                            - Room size is unrealistically large/small
+                            - Invalid entries
+                            """, unsafe_allow_html=True)
+                    print(f"Unexpected {err=}, {type(err)=}")
+                    # raise
 
 
 
 
-# #------------------------user inputs-----------------------------------
-# #inputs for weights for users
-# weight_dict={"Don't care much":1/10,
-#              "Somewhat important":1/3,
-#              'Average':1,
-#              'Quite important':3,
-#              'Very important':10}
-
-# user_number_pages_dict={"few":1,
-#              "some":3,
-#              'many':5}
-
-# with st.sidebar:
-#     form = st.form("calc_weights")
-
-#     # City selection
-#     form.selectbox(label = 'Please select a city of interest', key='input_city', options = preloaded_cities, index=preloaded_cities.index('Berlin'))
-#     # form.text_input(label='Type city name', key='input_city', type="default", on_change=None, placeholder='p.ex. Berlin')
-
-
-#     expander_weights = form.expander("Options")
-
-#     # Weights selection
-#     expander_weights.select_slider(label='Activities and Services:', options=list(weight_dict.keys()), value='Average', key='weight_activity')
-#     expander_weights.select_slider(label='Comfort:', options=list(weight_dict.keys()), value='Average', key='weight_comfort')
-#     expander_weights.select_slider(label='Mobility:', options=list(weight_dict.keys()), value='Average', key='weight_mobility')
-#     expander_weights.select_slider(label='Social life:', options=list(weight_dict.keys()), value='Average', key='weight_social')
-
-
-
-#     ## Checkbox for wg-gesuch ads
-#     expander = form.expander("Housing offers (German cities only)")
-
-#     cbox_wggesucht = expander.checkbox('Display housing offers?')
-
-#     # Search filter criterium
-#     user_filters = expander.multiselect(
-#                 'Search filters',
-#                 ["Room in flatshare","Single room flat","Flat","House"],
-#                 ["Room in flatshare"])
-
-#     dict_filters = {"Room in flatshare":"wg-zimmer",
-#                     "Single room flat":"1-zimmer-wohnungen",
-#                     "Flat":"wohnungen",
-#                     "House":"haeuser"}
-#     user_filters = [dict_filters.get(filter) for filter in user_filters]
-
-#     # Number of search pages
-#     user_number_pages = expander.radio('Number of housing offers to display', user_number_pages_dict.keys())
-
-#     user_number_pages = user_number_pages_dict.get(user_number_pages)
-
-#     #Form submit button to generate the inputs from the user
-#     submitted = form.form_submit_button('Display livability map', on_click=None)
-
-
-# ## Page after submission
-# if submitted:
-#     placeholder_map.empty()
-#     weights_inputs = (st.session_state.weight_activity,
-#                st.session_state.weight_comfort,
-#                st.session_state.weight_mobility,
-#                st.session_state.weight_social,
-#             #    'Average' # Last weight 'average' refers to negative features
-#                )
-#     weights=[weight_dict[i] for i in weights_inputs]
-#     #check weights
-#     print(f'Weights entered by user: {weights}')
-
-#     city = LivabilityMap(location=st.session_state.input_city, weights=weights)
-#     city.calc_livability()
-#     df_liv = city.df_grid_Livability
-
-#     # MinMax scale all columns for display
-#     categories_interest = ['activities_mean', 'comfort_mean', 'mobility_mean', 'social_mean']
-#     df_liv = min_max_scaler(df_liv, columns = categories_interest)
-#     #city center position lat,lon
-#     # city_coords = [np.mean(df_liv['lat_center']),np.mean(df_liv['lng_center'])]
-#     row_max_liv = df_liv[df_liv['livability'] == max(df_liv['livability'])].head(1)
-#     city_coords = [float(row_max_liv['lat_center']),float(row_max_liv['lng_center'])]
-
-#     print(f"""============ {city.location} coordinates: {city_coords} =============""")
-
-
-#     #for filling the polygon
-#     style_function = {'fillColor': 'transparent',
-#                  'lineColor': '#00FFFFFF'}
-#     # city borders map
-#     geojson_path=f'{ROOT_DIR}/housing_crawler/data/{city.location_name}/{city.location_name}_boundaries.geojson'
-#     file = open(geojson_path, encoding="utf8").read()
-#     city_borders = GeoJson(file,
-#                           name=city.location,
-#                           show=True,
-#                           style_function=lambda x:style_function,
-#                           zoom_on_click=True)
-#     mapObj = plot_map(df_liv, city_coords, city_borders)
-#     #Used to fill the placeholder of the world map with according one of the selected city
-#     with placeholder_map.container():
-#         st.markdown(f"""
-#                 # Here's the livability map for <span style="color:tomato">{city.location}</span><br>
-#                 """, unsafe_allow_html=True)
-
-#         displayed_map = st.empty()
-#         with displayed_map:
-#             stf.folium_static(mapObj, width=700, height=500)
-#         st.markdown(f"""
-#             The livability score is only as good as the data available for calculating it. Be aware that the sourced data from OpenStreetMap that is used for calculating the livability score differs in quality around the world.
-#             """)
-
-#         ## Add wg-gesucht ads
-#         if city.location in list(dict_city_number_wggesucht.keys()) and cbox_wggesucht:
-#             start_placeholder = st.empty()
-#             start_placeholder.markdown("""
-#                     Searching for housing offers...<br>
-#                     If this is taking longer than 3-5 minutes, please try again later.
-#                     """, unsafe_allow_html=True)
-
-#             # Obtain recent ads
-#             CrawlWgGesucht().crawl_all_pages(location_name = city.location,
-#                                              number_pages = user_number_pages,
-#                                              filters = user_filters)
-
-#             df = pd.read_csv(f"{ROOT_DIR}/housing_crawler/data/{standardize_characters(city.location)}/Ads/{standardize_characters(city.location)}_ads.csv")
-#             print(f'===> Loaded ads')
-
-#             ## Filter ads table
-#             # Remove ads without latitude and longitude
-#             df = df.dropna(subset=['latitude'])
-
-#             ## Add ads to map
-#             for index,row in df.iterrows():
-#                 livability = get_liv_from_coord(row.loc['latitude'],row.loc['longitude'],liv_df = df_liv)
-#                 if 'WG' in row.loc['type_offer']:
-#                     tooltip = f"""
-#                               {row.loc['title']}<br>
-#                               Address: {row.loc['address']}<br>
-#                               Rent (month): {row.loc['price_euros']} €<br>
-#                               Room size: {row.loc['size_sqm']} sqm<br>
-#                               Capacity: {row.loc['WG_size']} people<br>
-#                               Published on: {row.loc['published_on']}<br>
-#                               Available from: {'' if pd.isnull(row.loc['available_from']) else row.loc['available_from']}<br>
-#                               Available until: {'' if pd.isnull(row.loc['available_to']) else row.loc['available_to']}<br>
-#                               Location livability score: {int(0 if pd.isnull(livability) else 100*livability)}%
-#                               """
-#                 elif '1 Zimmer Wohnung' in row.loc['type_offer']:
-#                     tooltip = f"""
-#                               {row.loc['title']}<br>
-#                               Address: {row.loc['address']}<br>
-#                               Rent (month): {row.loc['price_euros']} €<br>
-#                               Property size: {row.loc['size_sqm']} sqm<br>
-#                               Published on: {row.loc['published_on']}<br>
-#                               Available from: {row.loc['available_from']}<br>
-#                               Available until: {'open end' if pd.isnull(row.loc['available_to']) else row.loc['available_to']}<br>
-#                               Location livability score: {int(0 if pd.isnull(livability) else 100*livability)}%
-#                               """
-#                 else:
-#                     tooltip = f"""
-#                               {row.loc['title']}<br>
-#                               Address: {row.loc['address']}<br>
-#                               Rent (month): {row.loc['price_euros']} €<br>
-#                               Property size: {row.loc['size_sqm']} sqm<br>
-#                               Rooms: {row.loc['available_rooms']} rooms<br>
-#                               Published on: {row.loc['published_on']}<br>
-#                               Available from: {row.loc['available_from']}<br>
-#                               Available until: {'open end' if pd.isnull(row.loc['available_to']) else row.loc['available_to']}<br>
-#                               Location livability score: {int(0 if pd.isnull(livability) else 100*livability)}%
-#                               """
-
-
-#                 folium.Marker(location=[row.loc['latitude'], row.loc['longitude']],
-#                               tooltip=tooltip,
-#                               popup=f"""
-#                               <a href="{row.loc['url']}">{row.loc['url']}</a>
-#                               """,
-#                                 icon=folium.Icon(color='purple', icon='home'))\
-#                     .add_to(mapObj)
-
-#             ## Display map
-#             start_placeholder.markdown("""
-#                     Showing recently posted housing offers in your city. Be aware that the displayed locations are approximated.<br> This list is not comprehensive and more offers are available at [wg-gesucht.de](wg-gesucht.de).
-#                     """, unsafe_allow_html=True)
-
-#         with displayed_map:
-#             stf.folium_static(mapObj, width=500, height=500)
+            else:
+                st.markdown("There was a problem connecting to the provided link. The url should look similar to this: 'https://www.wg-gesucht.de/wg-zimmer-in-City.1234567.html'", unsafe_allow_html=True)

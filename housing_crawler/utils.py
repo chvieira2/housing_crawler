@@ -183,6 +183,8 @@ def crawl_ind_ad_page(url, sess=None):
     info = list(soup.find('table', {'class':'table'}).find_all('tr'))
     if len(info) > 0 and 'SCHUFA erwünscht' in str(info):
         detail_dict['Schufa_needed'] = True
+    else:
+        detail_dict['Schufa_needed'] = False
 
     ## Deposit
     kosten = soup.find('input', {'id':'kaution'})
@@ -591,42 +593,42 @@ def crawl_ind_ad_page2(url, sess=None):
         landlord_type = 'Private'
 
     detail_dict = {
-            'id': int(url.split('.')[-2].strip()),
-            'url': str(url),
-            'type_offer': str(type_offer),
-            'landlord_type': str(landlord_type),
-            'title': str(title),
-            'price_euros': int(price),
-            'size_sqm': int(size),
-            'available_rooms': float(number_rooms),
-            'WG_size': int(flatmates_list[0]),
-            'available_spots_wg': int(flatmates_list[0]-flatmates_list[1]-flatmates_list[2]-flatmates_list[3]),
-            'male_flatmates': int(flatmates_list[1]),
-            'female_flatmates': int(flatmates_list[2]),
-            'diverse_flatmates': int(flatmates_list[3]),
-            'published_on': str(published_date),
-            'published_at': np.nan if pd.isnull(published_time) else int(published_time),
-            'address': str(address),
-            'city': str(german_characters(city)),
-            'crawler': 'WG-Gesucht',
-            'latitude': np.nan if pd.isnull(lat) else float(lat),
-            'longitude': np.nan if pd.isnull(lon) else float(lon)
+            'id': [int(url.split('.')[-2].strip())],
+            'url': [str(url)],
+            'type_offer': [str(type_offer)],
+            'landlord_type': [str(landlord_type)],
+            'title': [str(title)],
+            'price_euros': [int(price)],
+            'size_sqm': [int(size)],
+            'available_rooms': [float(number_rooms)],
+            'WG_size': [int(flatmates_list[0])],
+            'available_spots_wg': [int(flatmates_list[0]-flatmates_list[1]-flatmates_list[2]-flatmates_list[3])],
+            'male_flatmates': [int(flatmates_list[1])],
+            'female_flatmates': [int(flatmates_list[2])],
+            'diverse_flatmates': [int(flatmates_list[3])],
+            'published_on': [str(published_date)],
+            'published_at': [np.nan if pd.isnull(published_time) else int(published_time)],
+            'address': [str(address)],
+            'city': [str(german_characters(city))],
+            'crawler': ['WG-Gesucht'],
+            'latitude': [np.nan if pd.isnull(lat) else float(lat)],
+            'longitude': [np.nan if pd.isnull(lon) else float(lon)]
         }
     if len(availability_dates) == 2:
-        detail_dict['available from'] = str(availability_dates[0])
-        detail_dict['available to'] = str(availability_dates[1])
+        detail_dict['available from'] = [str(availability_dates[0])]
+        detail_dict['available to'] = [str(availability_dates[1])]
     elif len(availability_dates) == 1:
-        detail_dict['available from'] = str(availability_dates[0])
-        detail_dict['available to'] = np.nan
+        detail_dict['available from'] = [str(availability_dates[0])]
+        detail_dict['available to'] = [np.nan]
 
 
     #### Further details ####
-    detail_dict['details_searched'] = True
+    detail_dict['details_searched'] = [True]
     ## Cold rent
     cold_rent = soup.find('table', {'class':'table'}).find('td', {'style':'padding: 3px 8px; font-size: 1.5em; vertical-align: bottom;'})
     if cold_rent is not None:
         cold_rent = cold_rent.text.strip().replace('€','')
-        detail_dict['cold_rent_euros'] = np.nan if cold_rent == 'n.a.' else int(cold_rent)
+        detail_dict['cold_rent_euros'] = [np.nan if cold_rent == 'n.a.' else int(cold_rent)]
 
     ## Mandatory costs
     mandatory_costs = list(soup.find('table', {'class':'table'}).find_all('tr'))
@@ -637,11 +639,11 @@ def crawl_ind_ad_page2(url, sess=None):
 
         try:
             mandatory_costs = mandatory_costs.replace('€','')
-            detail_dict['mandatory_costs_euros'] = np.nan if mandatory_costs == 'n.a.' else int(mandatory_costs)
+            detail_dict['mandatory_costs_euros'] = [np.nan if mandatory_costs == 'n.a.' else int(mandatory_costs)]
         except IndexError:
-            detail_dict['mandatory_costs_euros'] = np.nan
+            detail_dict['mandatory_costs_euros'] = [np.nan]
     else:
-        detail_dict['mandatory_costs_euros'] = 0
+        detail_dict['mandatory_costs_euros'] = [0]
 
     ## Extra costs
     extra_costs = list(soup.find('table', {'class':'table'}).find_all('tr'))
@@ -650,11 +652,11 @@ def crawl_ind_ad_page2(url, sess=None):
         extra_costs = [item for item in extra_costs if 'Sonstige Kosten' in item]
         try:
             extra_costs = extra_costs[0].replace('Sonstige Kosten:','').strip().replace('€','')
-            detail_dict['extra_costs_euros'] = 0 if extra_costs == 'n.a.' else int(extra_costs)
+            detail_dict['extra_costs_euros'] = [0 if extra_costs == 'n.a.' else int(extra_costs)]
         except IndexError:
-            detail_dict['extra_costs_euros'] = 0
+            detail_dict['extra_costs_euros'] = [0]
     else:
-        detail_dict['extra_costs_euros'] = 0
+        detail_dict['extra_costs_euros'] = [0]
 
     ## Transfer costs
     transfer_costs = list(soup.find('table', {'class':'table'}).find_all('tr'))
@@ -663,97 +665,21 @@ def crawl_ind_ad_page2(url, sess=None):
         transfer_costs = [item for item in transfer_costs if 'Ablösevereinbarung' in item]
         try:
             transfer_costs = transfer_costs[0].replace('Ablösevereinbarung:','').strip().replace('€','')
-            detail_dict['transfer_costs_euros'] = 0 if transfer_costs == 'n.a.' else int(transfer_costs)
+            detail_dict['transfer_costs_euros'] = [0 if transfer_costs == 'n.a.' else int(transfer_costs)]
         except IndexError:
-            detail_dict['transfer_costs_euros'] = 0
+            detail_dict['transfer_costs_euros'] = [0]
     else:
-        detail_dict['transfer_costs_euros'] = 0
-
-    ## Schufa needed
-    info = list(soup.find('table', {'class':'table'}).find_all('tr'))
-    if len(info) > 0 and 'SCHUFA erwünscht' in str(info):
-        detail_dict['Schufa_needed'] = True
+        detail_dict['transfer_costs_euros'] = [0]
 
     ## Deposit
     kosten = soup.find('input', {'id':'kaution'})
     if kosten is not None:
-        detail_dict['deposit'] = np.nan if kosten['value'] == 'n.a.' else int(kosten['value'])
+        detail_dict['deposit'] = [np.nan if kosten['value'] == 'n.a.' else int(kosten['value'])]
     else:
-        detail_dict['deposit'] = 0
+        detail_dict['deposit'] = [0]
 
     # zip_code
-    detail_dict['zip_code'] = address_zip
-
-
-    ## Look inside ad only if wg_detail exist (WGs only)
-    wg_detail = soup.find_all('ul', {'class':'ul-detailed-view-datasheet print_text_left'})
-    if len(wg_detail) > 1:
-        die_wg = wg_detail[0]
-        gesucht_wird = wg_detail[1]
-
-        ## General details
-        die_wg = [cont.text.replace('\n','').strip() for cont in die_wg.find_all('li')]
-
-        # Home total size
-        home_total_size = [item for item in die_wg if 'Wohnungsgr' in item]
-        if len(home_total_size) != 0:
-            home_total_size = home_total_size[0]
-            home_total_size = re.sub(' +', ' ', home_total_size).replace('Wohnungsgröße: ','').replace('m²','').strip()
-            detail_dict['home_total_size'] = int(home_total_size)
-        else:
-            detail_dict['home_total_size'] = np.nan
-
-        # Smoking
-        smoking = [item for item in die_wg if 'Rauch' in item]
-        if len(smoking) != 0:
-            smoking = smoking[0]
-            smoking = re.sub(' +', ' ', smoking).strip()
-            detail_dict['smoking'] = smoking
-        else:
-            detail_dict['smoking'] = np.nan
-
-        # WG type
-        wg_type = [item for item in die_wg]
-        if len(wg_type) > 3:
-            selection = wg_type[3:]
-            wg_type = [item for item in selection if 'Bewohneralte' not in item and\
-                                                'Rauch' not in item and\
-                                                'Sprach' not in item\
-                                                ]
-            if len(wg_type) > 0:
-                wg_type = wg_type[0]
-                wg_type = re.sub(' +', ' ', wg_type).strip()
-                detail_dict['wg_type'] = wg_type
-        else:
-            detail_dict['wg_type'] = np.nan
-
-        # Spoken languages
-        languages = [item for item in die_wg if 'Sprach' in item]
-        if len(languages) != 0:
-            languages = languages[0].split(':')[1]
-            languages = re.sub(' +', ' ', languages).strip()
-            detail_dict['languages'] = languages
-        else:
-            detail_dict['languages'] = np.nan
-
-        # Age range
-        age_range = [item for item in die_wg if 'Bewohneralter:' in item]
-        if len(age_range) != 0:
-            age_range = age_range[0].split(':')[1]
-            age_range = re.sub(' +', ' ', age_range).strip()
-            detail_dict['age_range'] = age_range
-        else:
-            detail_dict['age_range'] = np.nan
-
-        # Gender searched
-        try:
-            detail = gesucht_wird.find('li').text.replace('\n','')
-            detail = re.sub(' +', ' ', detail).strip()
-            detail_dict['gender_search'] = detail
-            pass
-        except AttributeError:
-            if detail_dict.get('gender_search') is None:
-                detail_dict['gender_search'] = np.nan
+    detail_dict['zip_code'] = [address_zip]
 
 
 
@@ -930,7 +856,85 @@ def crawl_ind_ad_page2(url, sess=None):
             if detail_dict.get('extras') is None:
                 detail_dict['extras'] = np.nan
 
-    return pd.Series(detail_dict)
+    ## Look inside ad only if wg_detail exist (WGs only)
+    wg_detail = soup.find_all('ul', {'class':'ul-detailed-view-datasheet print_text_left'})
+    if len(wg_detail) > 1:
+        die_wg = wg_detail[0]
+        gesucht_wird = wg_detail[1]
+
+        ## General details
+        die_wg = [cont.text.replace('\n','').strip() for cont in die_wg.find_all('li')]
+
+        # Home total size
+        home_total_size = [item for item in die_wg if 'Wohnungsgr' in item]
+        if len(home_total_size) != 0:
+            home_total_size = home_total_size[0]
+            home_total_size = re.sub(' +', ' ', home_total_size).replace('Wohnungsgröße: ','').replace('m²','').strip()
+            detail_dict['home_total_size'] = [int(home_total_size)]
+        else:
+            detail_dict['home_total_size'] = [np.nan]
+
+        # Smoking
+        smoking = [item for item in die_wg if 'Rauch' in item]
+        if len(smoking) != 0:
+            smoking = smoking[0]
+            smoking = re.sub(' +', ' ', smoking).strip()
+            detail_dict['smoking'] = [smoking]
+        else:
+            detail_dict['smoking'] = [np.nan]
+
+        # WG type
+        wg_type = [item for item in die_wg]
+        if len(wg_type) > 3:
+            selection = wg_type[3:]
+            wg_type = [item for item in selection if 'Bewohneralte' not in item and\
+                                                'Rauch' not in item and\
+                                                'Sprach' not in item\
+                                                ]
+            if len(wg_type) > 0:
+                wg_type = wg_type[0]
+                wg_type = re.sub(' +', ' ', wg_type).strip()
+                detail_dict['wg_type'] = [wg_type]
+        else:
+            detail_dict['wg_type'] = [np.nan]
+
+        # Spoken languages
+        languages = [item for item in die_wg if 'Sprach' in item]
+        if len(languages) != 0:
+            languages = languages[0].split(':')[1]
+            languages = re.sub(' +', ' ', languages).strip()
+            detail_dict['languages'] = [languages]
+        else:
+            detail_dict['languages'] = [np.nan]
+
+        # Age range
+        age_range = [item for item in die_wg if 'Bewohneralter:' in item]
+        if len(age_range) != 0:
+            age_range = age_range[0].split(':')[1]
+            age_range = re.sub(' +', ' ', age_range).strip()
+            detail_dict['age_range'] = [age_range]
+        else:
+            detail_dict['age_range'] = [np.nan]
+
+        # Gender searched
+        try:
+            detail = gesucht_wird.find('li').text.replace('\n','')
+            detail = re.sub(' +', ' ', detail).strip()
+            detail_dict['gender_search'] = [detail]
+            pass
+        except AttributeError:
+            if detail_dict.get('gender_search') is None:
+                detail_dict['gender_search'] = [np.nan]
+
+
+    ## Schufa needed
+    info = list(soup.find('table', {'class':'table'}).find_all('tr'))
+    if len(info) > 0 and 'SCHUFA erwünscht' in str(info):
+        detail_dict['Schufa_needed'] = [True]
+    else:
+        detail_dict['Schufa_needed'] = [False]
+
+    return pd.DataFrame.from_dict(detail_dict)
 
 def lat_lon_to_polygon(df_grid):
     """Receives a dataframe with coordinates columns and adds a column of respective polygons"""
@@ -963,7 +967,7 @@ def get_grid_polygons_all_cities():
 
         df_feats.to_file(f'{ROOT_DIR}/housing_crawler/data/grid_all_cities.geojson', driver='GeoJSON')
 
-    return df_feats
+    return gpd.GeoDataFrame(df_feats)
 
 def standardize_features(df, features):
     df_standardized = df.copy()

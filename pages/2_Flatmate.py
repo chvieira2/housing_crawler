@@ -309,7 +309,7 @@ with st.expander("I found an ad in wg-gesucht.de and want to know if the price f
                             - Invalid entries
                             """, unsafe_allow_html=True)
                     print(f"Unexpected {err=}, {type(err)=}")
-                    # raise
+                    raise
 
 
 

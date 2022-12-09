@@ -11,6 +11,7 @@ numpy
 pandas
 geopandas
 shapely
+rtree
 
 # Plotting
 plotly

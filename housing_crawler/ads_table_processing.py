@@ -779,7 +779,7 @@ def imputing_values(ads_df):
 
     return ads_df
 
-def process_ads_tables(input_ads_df = None, save_processed = True, df_feats = None):
+def process_ads_tables(input_ads_df = None, save_processed = True, df_feats_tag = None):
 
     year = time.strftime(f"%Y", time.localtime())
     month = time.strftime(f"%m", time.localtime())
@@ -791,7 +791,7 @@ def process_ads_tables(input_ads_df = None, save_processed = True, df_feats = No
 
     df_processed = transform_columns_into_numerical(ads_df = df_processed)
     df_processed = split_cat_columns(ads_df = df_processed)
-    df_processed = feature_engineering(ads_df = df_processed, df_feats=df_feats)
+    df_processed = feature_engineering(ads_df = df_processed, df_feats_tag=df_feats_tag)
     df_processed = imputing_values(ads_df = df_processed)
 
     df_processed = df_processed.drop_duplicates(subset = ['id'], keep='first')

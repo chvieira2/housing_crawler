@@ -242,17 +242,20 @@ class CrawlWgGesucht(Crawler):
                 print('\n')
 
         # Obtain older ads, or create empty table if there are no older ads.
-        try:
-            previous_3_months_df = pd.concat([
-                get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=1)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
-                            local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads'''),
-                get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=2)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
-                            local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads'''),
-                get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=3)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
-                            local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads'''),
-            ])
-        except FileNotFoundError:
-            previous_3_months_df=pd.DataFrame({'url':[]})
+        previous_ads = []
+        for i in range(1,6):
+            try:
+                previous_ads.append(
+                    get_file(file_name=f'''{(datetime.date.today() - relativedelta(months=i)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv''',
+                                local_file_path=f'''housing_crawler/data/{standardize_characters(location_name)}/Ads'''))
+                print(f'''Loaded {f"{(datetime.date.today() - relativedelta(months=i)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv"}''')
+            except:
+                print(f'''Loading {f"{(datetime.date.today() - relativedelta(months=i)).strftime('%Y%m')}_{standardize_characters(location_name)}_ads.csv"} failed...''')
+
+        if len(previous_ads) > 0:
+            previous_months_df = pd.concat(previous_ads)
+        else:
+            previous_months_df=pd.DataFrame({'url':[]})
 
         zero_new_ads_in_a_row = 0
         total_added_findings = 0
@@ -270,7 +273,7 @@ class CrawlWgGesucht(Crawler):
             except FileNotFoundError:
                 current_month_df=pd.DataFrame({'url':[]})
 
-            old_df = pd.concat([current_month_df,previous_3_months_df], axis = 0)
+            old_df = pd.concat([current_month_df,previous_months_df], axis = 0)
 
 
             # Extracting info of interest from pages
@@ -491,7 +494,7 @@ class CrawlWgGesucht(Crawler):
         print(f'''========= {total_added_findings} ads in total were added to {datetime.date.today().strftime('%Y%m')}_{location_name}_ads.csv. =========''')
         print('\n')
 
-    def long_search(self, day_stop_search = '01.01.2024', pages_per_search = 100, start_search_from_index = 0):
+    def long_search(self, day_stop_search = '01.01.2024', pages_per_search = 50, start_search_from_index = 0):
         '''
         This method runs the search for ads until a defined date and saves results in .csv file.
         '''

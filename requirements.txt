@@ -13,7 +13,6 @@ geopandas
 shapely
 rtree
 scikit-learn
-pickle
 
 # Plotting
 plotly

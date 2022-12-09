@@ -272,7 +272,7 @@ with st.expander("I found an ad in wg-gesucht.de and want to know if the price f
 
                     ## Load model for prediction (locally or from Github)
                     # trained_model = pickle.load(open(f'{ROOT_DIR}/model/PredPipeline_WG_allcities_price_per_sqm_cold.pkl','rb'))
-                    trained_model = pd.read_pickle('https://github.com/chvieira2/wg_price_predictor/blob/7ee64978ef63dfc4185b70ebf146c19317c27350/wg_price_predictor/models/PredPipeline_WG_allcities_price_per_sqm_cold.pkl')
+                    trained_model = pd.read_pickle('https://github.com/chvieira2/wg_price_predictor/blob/main/wg_price_predictor/models/PredPipeline_WG_allcities_price_per_sqm_cold.pkl')
 
                     ## Make predictions
                     pred_price_sqm = float(trained_model.predict(ad_df_processed))

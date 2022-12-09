@@ -8,6 +8,7 @@
 **/__pycache__/
 .env
 *.geojson
+!*_grid_feats.geojson
 !housing_crawler/data/germany/bundeslaender/*.geojson
 !housing_crawler/data/**/*border.geojson
 # *.ipynb

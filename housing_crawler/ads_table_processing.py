@@ -13,6 +13,7 @@ import geopandas as gpd
 
 from housing_crawler.utils import save_file, get_file, get_grid_polygons_all_cities
 from housing_crawler.string_utils import standardize_characters
+from config.config import ROOT_DIR
 
 
 def prepare_data(ads_df):
@@ -659,6 +660,9 @@ def feature_engineering(ads_df, df_feats = None):
     # Collect features
     if df_feats is None:
         df_feats = get_grid_polygons_all_cities()
+    elif df_feats == 'city':
+        city = list(ads_df['city'])[0]
+        df_feats = gpd.read_file(f'{ROOT_DIR}/housing_crawler/data/{standardize_characters(city)}/{standardize_characters(city)}_grid_feats.geojson', driver='GeoJSON')
 
     # Merge features into ads dataframe
     ads_df = gpd.sjoin(ads_df,df_feats,how="left").drop(columns=['geometry', 'index_right'])

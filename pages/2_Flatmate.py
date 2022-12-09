@@ -21,6 +21,8 @@ import pandas as pd
 import numpy as np
 import time
 import pickle
+import geopandas as gpd
+
 from config.config import ROOT_DIR
 
 
@@ -265,12 +267,8 @@ with st.expander("I found an ad in wg-gesucht.de and want to know if the price f
                 ## Process url to obtain table for prediction
                 ad_df = crawl_ind_ad_page2(url)
 
-                @st.cache(allow_output_mutation=True)
-                def get_df_feats():
-                    return get_grid_polygons_all_cities()
-
                 try:
-                    ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats = get_df_feats())
+                    ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats = 'city')
 
                     ## Load model for prediction (locally or from Github)
                     trained_model = pickle.load(open(f'{ROOT_DIR}/model/PredPipeline_WG_allcities_price_per_sqm_cold.pkl','rb'))

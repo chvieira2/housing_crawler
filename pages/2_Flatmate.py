@@ -21,9 +21,7 @@ import pandas as pd
 import numpy as np
 import time
 import pickle
-import geopandas as gpd
-
-from config.config import ROOT_DIR
+from urllib.request import urlopen
 
 
 #-----------------------page configuration-------------------------
@@ -272,8 +270,10 @@ with st.expander("I found an ad in wg-gesucht.de and want to know if the price f
 
                     ## Load model for prediction (locally or from Github)
                     # trained_model = pickle.load(open(f'{ROOT_DIR}/model/PredPipeline_WG_allcities_price_per_sqm_cold.pkl','rb'))
-                    with open('https://github.com/chvieira2/wg_price_predictor/blob/main/wg_price_predictor/models/PredPipeline_WG_allcities_price_per_sqm_cold.pkl', 'rb') as f:
-                        trained_model = pickle.load(f)
+                    trained_model = pickle.load(urlopen("https://github.com/chvieira2/wg_price_predictor/blob/main/wg_price_predictor/models/PredPipeline_WG_allcities_price_per_sqm_cold.pkl"))
+
+                    # with open('https://github.com/chvieira2/wg_price_predictor/blob/main/wg_price_predictor/models/PredPipeline_WG_allcities_price_per_sqm_cold.pkl', 'rb') as f:
+                    #     trained_model = pickle.load(f)
 
                     ## Make predictions
                     pred_price_sqm = float(trained_model.predict(ad_df_processed))

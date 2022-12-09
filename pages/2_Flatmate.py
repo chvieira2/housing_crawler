@@ -268,7 +268,7 @@ with st.expander("I found an ad in wg-gesucht.de and want to know if the price f
                 ad_df = crawl_ind_ad_page2(url)
 
                 try:
-                    ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats = 'city')
+                    ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats_tag = 'city')
 
                     ## Load model for prediction (locally or from Github)
                     trained_model = pickle.load(open(f'{ROOT_DIR}/model/PredPipeline_WG_allcities_price_per_sqm_cold.pkl','rb'))

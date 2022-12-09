@@ -544,7 +544,7 @@ def get_availablility_time(published_on, available_to, available_from):
 
     return int((available_to-available_from).days)
 
-def feature_engineering(ads_df, df_feats = None):
+def feature_engineering(ads_df, df_feats_tag = None):
 
     print('Engineering features...')
 
@@ -658,9 +658,9 @@ def feature_engineering(ads_df, df_feats = None):
     ads_df = gpd.GeoDataFrame(ads_df, geometry='geometry', crs='wgs84').drop(columns=['coords'])
 
     # Collect features
-    if df_feats is None:
+    if df_feats_tag is None:
         df_feats = get_grid_polygons_all_cities()
-    elif df_feats == 'city':
+    elif df_feats_tag == 'city':
         city = list(ads_df['city'])[0]
         df_feats = gpd.read_file(f'{ROOT_DIR}/housing_crawler/data/{standardize_characters(city)}/{standardize_characters(city)}_grid_feats.geojson', driver='GeoJSON')
 

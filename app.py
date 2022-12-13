@@ -661,13 +661,8 @@ with tab1:
 
 
                     ## Load model for prediction locally. I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
-                    prep_pipeline = get_latest_model_from_db()
+                    trained_model = get_latest_model_from_db()
 
-
-
-
-                    ## Train model
-                    trained_model = prep_pipeline.fit(ads_df.drop(columns='price_per_sqm_cold'), ads_df['price_per_sqm_cold'])
 
                     ## Make predictions
                     pred_price_sqm = float(trained_model.predict(ad_df_processed))

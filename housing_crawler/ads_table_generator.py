@@ -15,7 +15,8 @@ from housing_crawler.geocoding_addresses import geocoding_address, fix_weird_add
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.utils import save_file, get_file, crawl_ind_ad_page
 from housing_crawler.string_utils import standardize_characters, capitalize_city_name, german_characters, simplify_address
-from ads_table_processing import process_ads_tables
+from housing_crawler.train_model_weeks import train_models
+from housing_crawler.ads_table_processing import process_ads_tables
 
 def fix_older_table(df_city, file_name, city,
                       sess = None, save_after = 3):
@@ -105,7 +106,7 @@ def fix_older_table(df_city, file_name, city,
     print(f'Finished geocoding addresses for {capitalize_city_name(german_characters(city))}. There are {len(df_city)} ads in {file_name}.')
     return df_city
 
-def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = True):
+def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = True, train_model = True):
     '''
     This function iterates through all folders of each city and saves the corresponding csvs into a single csv file.
     '''
@@ -143,6 +144,9 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = 
 
     if create_OSM_table:
         process_ads_tables(all_ads_df)
+
+    if train_model:
+        train_models()
 
 def long_search(day_stop_search = '01.01.2024', start_search_from_index = 0):
     '''

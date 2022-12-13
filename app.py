@@ -29,7 +29,7 @@ import pickle
 
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.string_utils import standardize_characters
-from housing_crawler.utils import crawl_ind_ad_page2
+from housing_crawler.utils import crawl_ind_ad_page2, get_data, obtain_latest_model
 from housing_crawler.ads_table_processing import process_ads_tables
 from housing_crawler.geocoding_addresses import geocoding_address
 
@@ -97,25 +97,20 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 # ---------------------- FUNCTIONS ----------------------
 @st.cache
-def get_data(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
+def get_data_from_db(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
     """
     Method to get data from local environment and return a unified dataframe
 
     """
+    return get_data(file_name_tag=file_name_tag, local_file_path=local_file_path)
 
-    csvs_list = []
-    for year in ['2022','2023']:
-        for month in ['01','02','03','04','05','06','07','08','09','10','11','12']:
+@st.cache
+def get_latest_model_from_db():
+    """
+    Method to get latest trained model from local dataabse
 
-            file_name = f'{year}{month}_{file_name_tag}'
-            local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'
-            try:
-                df = pd.read_csv(local_path)
-                csvs_list.append(df)
-            except FileNotFoundError:
-                pass
-
-    return pd.concat(csvs_list)
+    """
+    return obtain_latest_model()
 
 def filter_original_data(df, city, time_period):
     ## Format dates properly
@@ -607,13 +602,6 @@ st.markdown("""
 # )
 
 
-#############################
-### Obtain main ads table ###
-#############################
-# Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-ads_df = get_data().copy()
-
-
 
 
 ###############################################
@@ -634,6 +622,7 @@ with tab1:
         submitted_url = st.form_submit_button("Submit url")
 
         if submitted_url:
+
             url = st.session_state["url"]
             url_ok = False
             if url == '':
@@ -652,21 +641,32 @@ with tab1:
             if url_ok:
                 st.markdown(f'Analysing {url}', unsafe_allow_html=True)
 
+
                 ## Process url to obtain table for prediction
                 ad_df = crawl_ind_ad_page2(url)
 
                 try:
+                    ## Process ad_df for analysis
                     ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats_tag = 'city')
 
-                    ## Load model for prediction locally. I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
-                    prep_pipeline = pickle.load(open(f'{ROOT_DIR}/model/Pipeline_Ridge_untrained.pkl','rb'))
+                    ### Obtain main ads table ###
+                    # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
+                    ads_df = get_data_from_db().copy()
 
-                    # prep_pipeline = cloudpickle.load(urlopen("https://github.com/chvieira2/wg_price_predictor/blob/main/wg_price_predictor/models/PredPipeline_WG_allcities_price_per_sqm_cold_untrained.pkl"))
-                    # # UnpicklingError: invalid load key, '\x0a'.
+
+                    #### Filter data for analysis
+                    df_filtered = filter_original_data(df = ads_df,
+                                                        city = 'Germany',
+                                                        time_period = 'Past three months')
+
+
+                    ## Load model for prediction locally. I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
+                    prep_pipeline = get_latest_model_from_db()
+
+
 
 
                     ## Train model
-                    ads_df = get_data().copy()
                     trained_model = prep_pipeline.fit(ads_df.drop(columns='price_per_sqm_cold'), ads_df['price_per_sqm_cold'])
 
                     ## Make predictions
@@ -812,6 +812,14 @@ with tab2:
 
 
     if submitted_form:
+        #############################
+        ### Obtain main ads table ###
+        #############################
+        # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
+        ads_df = get_data_from_db().copy()
+
+
+        #### Checking inputted info is correct format
         if str(st.session_state.city_own) == "<Please select>":
             st.markdown("""
             Selecting a city is mandatory for analysis.
@@ -911,6 +919,14 @@ with tab3:
         submitted = st.form_submit_button("Show results")
 
         if submitted:
+            #############################
+            ### Obtain main ads table ###
+            #############################
+            # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
+            ads_df = get_data_from_db().copy()
+
+
+            #### Filter data for analysis
             df_filtered = filter_original_data(df = ads_df,
                                             city = st.session_state["city_filter"],
                                             time_period = st.session_state["time_period"])
@@ -982,9 +998,17 @@ with tab4:
                 **Besides the city in which one searches for WGs, several other factors are also relevant for rental price, including the WG structure and the renting conditions.\nHere, I highlight several of these factors based on the analysis of square-meter cold rental prices (€/m²) in Germany in the past three months.**
                 """, unsafe_allow_html=True)
 
+    #############################
+    ### Obtain main ads table ###
+    #############################
+    # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
+    ads_df = get_data_from_db().copy()
+
+
+            #### Filter data for analysis
     df_filtered = filter_original_data(df = ads_df,
-                                            city = 'Germany',
-                                            time_period = 'Past three months')
+                                        city = 'Germany',
+                                        time_period = 'Past three months')
 
     placeholder = st.empty()
     with placeholder.container():
@@ -1117,7 +1141,7 @@ with tab5:
     st.write('\n')
     st.markdown("""
             ### What is <span style="color:tomato">WG-prices</span>?
-            WG-prices is a free and intuitive webpage where anyone can analyse the WG market in Germany. It was created by [chvieira2](https://github.com/chvieira2) out of curiosity and desire to help others. Its purpose is to help people understand the housing market better, in particular the WG market.
+            WG-prices is a free and intuitive webpage where anyone can analyse the WG market in Germany. It was created by [chvieira2](https://github.com/chvieira2) out of curiosity and desire to help others. Its purpose is to help people understand the housing market better, in particular the WG market. For more details please visit [the GitHub repository](https://github.com/chvieira2/housing_crawler).
 
             ### Why do we need <span style="color:tomato">WG-prices</span>?
             The price paid for a WG is related to the rental price of the flat. However, the WG market is saturated, making people living in WGs susceptible to accept offers that charge more than they should. This is the case specially for younger adults and people coming from abroad that have little resources to judge the fairness of an offer.

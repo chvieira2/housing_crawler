@@ -788,7 +788,6 @@ def process_ads_tables(input_ads_df = None, save_processed = True, df_feats_tag 
 
     df_processed = prepare_data(ads_df = input_ads_df)
     df_processed = filter_out_bad_entries(ads_df = df_processed, country = 'Germany')
-
     df_processed = transform_columns_into_numerical(ads_df = df_processed)
     df_processed = split_cat_columns(ads_df = df_processed)
     df_processed = feature_engineering(ads_df = df_processed, df_feats_tag=df_feats_tag)

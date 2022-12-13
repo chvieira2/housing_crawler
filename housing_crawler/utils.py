@@ -5,6 +5,7 @@ import time
 import requests
 import os
 from shapely import wkt
+import pickle
 
 from shapely.geometry import Point, Polygon
 import geopandas as gpd
@@ -1004,6 +1005,35 @@ def report_best_scores(results, n_top=3):
                   results['std_test_score'][candidate]))
             print("Parameters: {0}".format(results['params'][candidate]))
             print("")
+
+def get_data(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
+    """
+    Method to get data from local environment and return a unified dataframe
+
+    """
+
+    csvs_list = []
+    for year in ['2022','2023']:
+        for month in ['01','02','03','04','05','06','07','08','09','10','11','12']:
+
+            file_name = f'{year}{month}_{file_name_tag}'
+            local_path = f'{ROOT_DIR}/{local_file_path}/{file_name}'
+            try:
+                df = pd.read_csv(local_path)
+                csvs_list.append(df)
+            except FileNotFoundError:
+                pass
+
+    return pd.concat(csvs_list)
+
+def obtain_latest_model():
+    directory = f'{ROOT_DIR}/model/trained_models'
+    pkl_files = []
+    for file in os.listdir(directory):
+        if file.endswith(".pkl"):
+            pkl_files.append(os.path.join(directory, file))
+    pkl_files = sorted([file_name.split('/')[-1] for file_name in pkl_files])
+    latest_model = pickle.load(open(f'{directory}/{pkl_files[-1]}','rb'))
 
 if __name__ == "__main__":
 

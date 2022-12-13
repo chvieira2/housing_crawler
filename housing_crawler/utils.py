@@ -1033,7 +1033,7 @@ def obtain_latest_model():
         if file.endswith(".pkl"):
             pkl_files.append(os.path.join(directory, file))
     pkl_files = sorted([file_name.split('/')[-1] for file_name in pkl_files])
-    latest_model = pickle.load(open(f'{directory}/{pkl_files[-1]}','rb'))
+    return pickle.load(open(f'{directory}/{pkl_files[-1]}','rb'))
 
 if __name__ == "__main__":
 

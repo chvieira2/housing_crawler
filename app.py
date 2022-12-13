@@ -691,7 +691,9 @@ with tab1:
 
                 except Exception as err:
                     st.markdown(f"""
-                            The analysis failed. Most common reasons for analysis to fail are wrong entries in the origianl ad itself. Examples of entries in the ad that lead to failed analysis:
+                            The analysis failed. Most common reasons for analysis to fail are wrong entries in the original ad in wg-gesucht.de.
+
+                            Examples of entries in the ad that lead to failed analysis:
                             - Rent price too low or too high
                             - Room size is unrealistically large/small
                             - Invalid entries

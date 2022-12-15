@@ -170,7 +170,7 @@ def ads_per_region_stacked_barplot(df,time_period, city):
     fig = px.bar(region_ads_df, x=stacking_by, y="count", color="type_offer_simple",
             labels={
                 stacking_by: "City" if stacking_by == 'city' else 'Zip code',
-                "count": 'Number of ads published',
+                "count": 'Number of similar ads',
                 "type_offer_simple": "Type of ad"
             },
             template = "ggplot2" #["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white", "none"]
@@ -613,7 +613,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["Analyse WG from url link", "Analyse my 
 
 with tab1:
     st.markdown("""
-            ### Check how a offer compares to thousands of other ads from [WG-gesucht](https://www.wg-gesucht.de/).
+            ### Check how <span style="color:tomato">**a WG room ad**</span> compares to thousands of other ads posted on [WG-gesucht](https://www.wg-gesucht.de/).
             """, unsafe_allow_html=True)
 
     with st.form("entry_url", clear_on_submit=False):
@@ -624,34 +624,28 @@ with tab1:
 
 
 
-        if submitted_url:
+    if submitted_url:
 
 
-            #### Preparing for analysis ####
-            url = str(st.session_state["url"])
-            url_ok = False
-            if url == '' or url == 'https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html' or not url.startswith('https://www.wg-gesucht.de'):
-                st.markdown("""
-                    Please submit a valid link to a WG ad from wg-gesucht.de.
+        #### Preparing for analysis ####
+        url = str(st.session_state["url"]).strip()
+        url_ok = False
+        if url == '' or url == 'https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html' or not url.startswith('https://www.wg-gesucht.de'):
+            st.markdown("""
+                Please submit a valid link to a WG ad from wg-gesucht.de.
+                """, unsafe_allow_html=True)
 
-                    A valid link has the format "https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html", where the Neighborhood tag may or may not be present.
-                    """, unsafe_allow_html=True)
+        elif not url.startswith('https://www.wg-gesucht.de/wg-zimmer-'):
+            st.markdown("""
+                The ad is not a WG. At the moment only WGs are supported.
+                """, unsafe_allow_html=True)
 
-            elif not url.startswith('https://www.wg-gesucht.de/wg-zimmer-'):
-                st.markdown("""
-                    The ad is not a WG. At the moment only WGs are supported.
-                    """, unsafe_allow_html=True)
-
-            else:
-                url_ok = True
+        else:
+            url_ok = True
 
 
-            if url_ok:
-                st.markdown(f"""
-                            Analysing {url}. This could take a minute.
-                            """, unsafe_allow_html=True)
-
-
+        if url_ok:
+            with st.spinner(f'Analysing {url}. This could take a minute.'):
                 ## Process url to obtain table for prediction
                 ad_df = crawl_ind_ad_page2(url)
 
@@ -659,233 +653,266 @@ with tab1:
                 try:
                     ## Process ad_df for analysis
                     ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats_tag = 'city')
+                    st.success('Analysis was successful!', icon="✅")
 
                 except Exception as err:
-                    st.markdown(f"""
-                            The analysis failed. Most common reasons for analysis to fail are wrong entries in the original ad in wg-gesucht.de.
+                    st.error(f"""
+                                The analysis failed. Most common reasons for analysis to fail are:
 
-                            Examples of entries in the ad that lead to failed analysis:
-                            - Rent price too low or too high
-                            - Room size is unrealistically large/small
-                            - Invalid entries in other fields
+                                - The ad is not active
+                                - Posted rent price is unrealistically expensive/cheap
+                                - Posted room size is unrealistically large/small
+                                - Invalid entries in other fields in the ad page
 
-                            Please get in contact if you think none of these reasons apply in your case.
+                                Please get in contact if you think none of these reasons apply in your case.
+                                """, icon="🚨")
+                    # print(f"Unexpected {err=}, {type(err)=}")
+                    # raise
+
+
+
+            if ad_df_processed is not None:
+
+        #### Collect files needed for analysis ####
+                ### Obtain main ads table ###
+                # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
+                ads_df = get_data_from_db().copy()
+                ### Filter data for analysis ###
+                ## WGs only
+                ads_df = ads_df[ads_df['type_offer_simple'] == 'WG']
+
+                ## Remove ad of interest from database
+                ads_df = ads_df[ads_df['id'] != list(ad_df_processed['id'])[0]]
+
+
+                ## Filter for past 3 months only
+                # Format dates properly
+                ads_df['published_on'] = pd.to_datetime(ads_df['published_on'], format = "%Y-%m-%d")
+                date_three_months_ago = datetime.date.today() + relativedelta(months=-3)
+                ads_df_3_months = ads_df[ads_df['published_on'] >= pd.to_datetime(date_three_months_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
+
+        #### Analysis results ####
+                placeholder = st.empty()
+                with placeholder.container():
+                    st.subheader(f"""
+                            This is how your WG compares to other WGs published in the past three months:
+                            """)
+                    col1, col2, col3, col4 = st.columns(4)
+
+            #### Number ads ####
+                    ## Same city
+                    ads_df_city = ads_df_3_months[ads_df_3_months['city'] == list(ad_df_processed['city'])[0]]
+                    n_posts_city = len(ads_df_city)
+                    n_days_post_city = round(90/n_posts_city,1)
+                    n_hours_post_city = round((24*90)/n_posts_city,1)
+
+                    ## Same zip
+                    ads_df_zip_code = ads_df_3_months[ads_df_3_months['zip_code'] == list(ad_df_processed['zip_code'])[0]]
+                    n_posts_zipcode = len(ads_df_zip_code)
+                    n_days_post_zipcode = round(90/n_posts_zipcode,1)
+                    n_hours_post_zipcode = round((24*90)/n_posts_zipcode,1)
+
+                    col1.markdown(f"""
+                            <font size= "4">**Number of ads posted**</font>
                             """, unsafe_allow_html=True)
-                    print(f"Unexpected {err=}, {type(err)=}")
-                    raise
+
+                    col1.markdown(f"""
+                            <font size= "4">On average, <span style="color:tomato">**{n_hours_post_city if n_days_post_city <= 1 else n_days_post_city}**</span> WG room ads were posted in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> every {'hour' if n_days_post_city <= 1 else 'day'}.
+
+                            <span style="color:tomato">**{n_hours_post_zipcode if n_days_post_zipcode <= 1 else n_days_post_zipcode}**</span> WG room ads with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span> were posted every {'hour' if n_days_post_zipcode <= 1 else 'day'}.</font>
+                            """, unsafe_allow_html=True)
+
+            #### Size room ####
+                    ## Smaller size
+                    ads_df_smaller = ads_df_3_months[ads_df_3_months['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+                    percent_smaller = round(100*(len(ads_df_smaller)/len(ads_df_3_months)),1)
+
+                    ## Smaller zip_code
+                    ads_df_smaller_zipcode = ads_df_zip_code[ads_df_zip_code['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+                    percent_smaller_zipcode = round(100*(len(ads_df_smaller_zipcode)/len(ads_df_zip_code)),1)
+
+                    col2.markdown(f"""
+                            <font size= "4">**Size of the room**</font>
+                            """, unsafe_allow_html=True)
+
+                    col2.markdown(f"""
+                            <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG room is bigger than <span style="color:tomato">**{percent_smaller} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_smaller_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            """, unsafe_allow_html=True)
+
+            #### Price ####
+                    ## Cheaper city
+                    ads_df_cheaper = ads_df_3_months[ads_df_3_months['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+                    percent_cheaper = round(100*(len(ads_df_cheaper)/len(ads_df_3_months)),1)
+
+                    ## Cheaper zip_code
+                    ads_df_cheaper_zipcode = ads_df_zip_code[ads_df_zip_code['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+                    percent_cheaper_zipcode = round(100*(len(ads_df_cheaper_zipcode)/len(ads_df_zip_code)),1)
+
+                    col3.markdown(f"""
+                            <font size= "4">**WG price**</font>
+                            """, unsafe_allow_html=True)
+
+                    col3.markdown(f"""
+                            <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG room is more expensive than <span style="color:tomato">**{percent_cheaper} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_cheaper_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            """, unsafe_allow_html=True)
+
+            #### Factors influencing price ####
+                    # Size
+                    wg_is_large = True if percent_smaller_zipcode > 50 else False
+
+                    # Location
+                    ads_df_not_zip_code = ads_df_city[ads_df_city['zip_code'] != list(ad_df_processed['zip_code'])[0]]
+                    ads_df_not_zip_code = ads_df_not_zip_code[ads_df_not_zip_code['zip_code'].notna()]
+                    mean_zip_code = ads_df_zip_code['price_euros'].mean()
+                    mean_not_zip_code = ads_df_not_zip_code['price_euros'].mean()
+
+                    import scipy.stats as stats
+                    #perform two sample t-test with equal variances
+                    p_value = stats.ttest_ind(a=ads_df_zip_code['price_euros'], b=ads_df_not_zip_code['price_euros'], equal_var = True, nan_policy = 'omit', random_state = 42)
+                    if p_value[1] <=0.05:
+                        if mean_zip_code > mean_not_zip_code:
+                            zip_is_more = 'pricier'
+                        else:
+                            zip_is_more = 'cheaper'
+                    else:
+                        zip_is_more = 'similar'
 
 
 
-                if ad_df_processed is not None:
+                    # schufa_needed
+                    schufa_needed = str(list(ad_df_processed['schufa_needed'])[0]) == '1'
 
-            #### Collect files needed for analysis ####
-                    ### Obtain main ads table ###
-                    # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-                    ads_df = get_data_from_db().copy()
-                    ### Filter data for analysis ###
-                    ## WGs only
-                    ads_df = ads_df[ads_df['type_offer_simple'] == 'WG']
+                    # commercial_landlord
+                    commercial_landlord = str(list(ad_df_processed['commercial_landlord'])[0]) == '1'
 
-                    ## Remove ad of interest from database
-                    ads_df = ads_df[ads_df['id'] != list(ad_df_processed['id'])[0]]
+                    # capacity
+                    capacity = int(list(ad_df_processed['capacity'])[0])
+
+                    # days_available
+                    days_available = int(list(ad_df_processed['days_available'])[0])
+
+                    # wg_type_studenten
+                    wg_type_studenten = str(list(ad_df_processed['wg_type_studenten'])[0]) == '1'
+
+                    # wg_type_business
+                    wg_type_business = str(list(ad_df_processed['wg_type_business'])[0]) == '1'
+
+                    # building_type
+                    building_type = str(list(ad_df_processed['building_type'])[0])
 
 
-                    ## Filter for past 3 months only
-                    # Format dates properly
-                    ads_df['published_on'] = pd.to_datetime(ads_df['published_on'], format = "%Y-%m-%d")
-                    date_three_months_ago = datetime.date.today() + relativedelta(months=-3)
-                    ads_df_3_months = ads_df[ads_df['published_on'] >= pd.to_datetime(date_three_months_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
+                    col4.markdown(f"""
+                            <font size= "4">**Possible factors affecting price**</font>
+                            """, unsafe_allow_html=True)
 
+
+                    def generate_text_possible_price_factors():
+                        prompts = ['\n','- Room is large' if percent_smaller_zipcode >= 70 else '- Room is small' if percent_smaller_zipcode <= 30 else '' +\
+                            '- WG in pricier neighborhood' if zip_is_more == 'pricier' else '- WG in cheaper neighborhood' if zip_is_more == 'cheaper' else '',
+
+                            '- WGs in ' + building_type + ' building type tend to be pricier' if building_type == 'Neubau' or building_type == 'Hochhaus' else '- WGs in ' + building_type + ' building type tend to be cheaper' if building_type == 'Einfamilienhaus' else '',
+
+                            '- Students WG type tend to be cheaper' if wg_type_studenten else '',
+
+                            '- Business WG type tend to be pricier' if wg_type_business else '',
+
+                            '- WGs that require Schufa tend to be pricier' if schufa_needed else '',
+
+                            '- WGs with companies as landlord tend to be pricier' if commercial_landlord else '',
+
+                            '- WGs with capacity for ' + str(capacity) + ' people tend to be pricier' if capacity >= 5 else '- WGs for only 2 people tend to be cheaper' if capacity == 2 else '',
+
+                            '- Short-term rental WGs (<30 days) tend to be cheaper' if days_available <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if days_available > 540 else '']
+
+                        return '\n'.join(text for text in prompts if text != '')
+
+                    col4.markdown(f"""
+                                    <font size= "4">{generate_text_possible_price_factors()}</font>
+                                    """, unsafe_allow_html=True)
+
+
+            #### Price prediction ####
+                '\n'
+                '\n'
+                placeholder_prediction = st.empty()
+                with placeholder_prediction.container():
+                    st.markdown(f"""
+                            <font size= "4">**Rent price fairness**</font>
+                            """, unsafe_allow_html=True)
+
+                    try:
+                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
+                    except ValueError: # cold_rent_euros is nan
+                        st.markdown(f"""
+                            The ad did not include the cold rent price for this room. Estimating cold rent price from warm rent.
+                            """, unsafe_allow_html=True)
+
+                        import statsmodels.api as sm
+
+
+                        # create predictive model for cold rent from warm rent
+                        wg_df_foo = ads_df_3_months[ads_df_3_months['cold_rent_euros'].notna()]
+                        wg_df_foo = wg_df_foo[wg_df_foo['price_euros'].notna()]
+                        model_cold_from_warm = sm.OLS(wg_df_foo.cold_rent_euros, wg_df_foo.price_euros).fit()
+
+                        # # Add cold rent predictions only if cold_rent_euros is nan
+                        ad_df_processed['cold_rent_euros'] = int(model_cold_from_warm.predict(ad_df_processed['price_euros'])[0])
+
+                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
 
 
                     ### Load model for prediction locally ###
                     # I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
                     trained_model = get_latest_model_from_db()
 
-            #### Analysis ####
-                    placeholder = st.empty()
-                    with placeholder.container():
-                        st.subheader(f"""
-                                This is how your WG compares to other WGs published in the past three months:
-                                """)
-                        col1, col2, col3, col4 = st.columns(4)
 
-                #### Number ads ####
-                        ## Same city
-                        ads_df_city = ads_df_3_months[ads_df_3_months['city'] == list(ad_df_processed['city'])[0]]
-                        n_posts_city = len(ads_df_city)
-                        n_days_post_city = round(90/n_posts_city,1)
-                        n_hours_post_city = round((24*90)/n_posts_city,1)
-
-                        ## Same zip
-                        ads_df_zip_code = ads_df_3_months[ads_df_3_months['zip_code'] == list(ad_df_processed['zip_code'])[0]]
-                        n_posts_zipcode = len(ads_df_zip_code)
-                        n_days_post_zipcode = round(90/n_posts_zipcode,1)
-                        n_hours_post_zipcode = round((24*90)/n_posts_zipcode,1)
-
-                        col1.markdown(f"""
-                                <font size= "4">**Number of ads posted**</font>
-                                """, unsafe_allow_html=True)
-
-                        col1.markdown(f"""
-                                <font size= "4">On average, <span style="color:tomato">**{n_hours_post_city if n_days_post_city <= 1 else n_days_post_city}**</span> WG ads in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> were posted every {'hour' if n_days_post_city <= 1 else 'day'}.
-
-                                <span style="color:tomato">**{n_hours_post_zipcode if n_days_post_zipcode <= 1 else n_days_post_zipcode}**</span> WG ads were posted every {'hour' if n_days_post_zipcode <= 1 else 'day'} with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
-                                """, unsafe_allow_html=True)
-
-                #### Size room ####
-                        ## Smaller size
-                        ads_df_smaller = ads_df_3_months[ads_df_3_months['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
-                        percent_smaller = round(100*(len(ads_df_smaller)/len(ads_df_3_months)),1)
-
-                        ## Smaller zip_code
-                        ads_df_smaller_zipcode = ads_df_zip_code[ads_df_zip_code['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
-                        percent_smaller_zipcode = round(100*(len(ads_df_smaller_zipcode)/len(ads_df_zip_code)),1)
-
-                        col2.markdown(f"""
-                                <font size= "4">**Size of the room**</font>
-                                """, unsafe_allow_html=True)
-
-                        col2.markdown(f"""
-                                <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG is bigger than <span style="color:tomato">**{percent_smaller} %**</span> of WG ads published in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_smaller_zipcode} %**</span> of WG ads published with the ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
-                                """, unsafe_allow_html=True)
-
-                #### Price ####
-                        ## Cheaper city
-                        ads_df_cheaper = ads_df_3_months[ads_df_3_months['price_euros'] < list(ad_df_processed['price_euros'])[0]]
-                        percent_cheaper = round(100*(len(ads_df_cheaper)/len(ads_df_3_months)),1)
-
-                        ## Cheaper zip_code
-                        ads_df_cheaper_zipcode = ads_df_zip_code[ads_df_zip_code['price_euros'] < list(ad_df_processed['price_euros'])[0]]
-                        percent_cheaper_zipcode = round(100*(len(ads_df_cheaper_zipcode)/len(ads_df_zip_code)),1)
-
-                        col3.markdown(f"""
-                                <font size= "4">**WG price**</font>
-                                """, unsafe_allow_html=True)
-
-                        col3.markdown(f"""
-                                <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG is more expensive than <span style="color:tomato">**{percent_cheaper} %**</span> of WG ads published in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_cheaper_zipcode} %**</span> of WG ads published with the ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
-                                """, unsafe_allow_html=True)
-
-                #### Factors influencing price ####
-                        # Size
-                        wg_is_large = True if percent_smaller_zipcode > 50 else False
-
-                        # Location
-                        ads_df_not_zip_code = ads_df_city[ads_df_city['zip_code'] != list(ad_df_processed['zip_code'])[0]]
-                        ads_df_not_zip_code = ads_df_not_zip_code[ads_df_not_zip_code['zip_code'].notna()]
-                        mean_zip_code = ads_df_zip_code['price_euros'].mean()
-                        mean_not_zip_code = ads_df_not_zip_code['price_euros'].mean()
-
-                        import scipy.stats as stats
-                        #perform two sample t-test with equal variances
-                        p_value = stats.ttest_ind(a=ads_df_zip_code['price_euros'], b=ads_df_not_zip_code['price_euros'], equal_var = True, nan_policy = 'omit', random_state = 42)
-                        if p_value[1] <=0.05:
-                            if mean_zip_code > mean_not_zip_code:
-                                zip_is_more = 'pricier'
-                            else:
-                                zip_is_more = 'cheaper'
-                        else:
-                            zip_is_more = 'similar'
-
-
-
-                        # schufa_needed
-                        schufa_needed = str(list(ad_df_processed['schufa_needed'])[0]) == '1'
-
-                        # commercial_landlord
-                        commercial_landlord = str(list(ad_df_processed['commercial_landlord'])[0]) == '1'
-
-                        # capacity
-                        capacity = int(list(ad_df_processed['capacity'])[0])
-
-                        # days_available
-                        days_available = int(list(ad_df_processed['days_available'])[0])
-
-                        # wg_type_studenten
-                        wg_type_studenten = str(list(ad_df_processed['wg_type_studenten'])[0]) == '1'
-
-                        # wg_type_business
-                        wg_type_business = str(list(ad_df_processed['wg_type_business'])[0]) == '1'
-
-                        # building_type
-                        building_type = str(list(ad_df_processed['building_type'])[0])
-
-
-                        col4.markdown(f"""
-                                <font size= "4">**Possible price factors**</font>
-                                """, unsafe_allow_html=True)
-
-
-                        def generate_text_possible_price_factors():
-                            prompts = ['\n','- Room is large' if percent_smaller_zipcode >= 70 else '- Room is small' if percent_smaller_zipcode <= 30 else '' +\
-                                '- WG in pricier neighborhood' if zip_is_more == 'pricier' else '- WG in cheaper neighborhood' if zip_is_more == 'cheaper' else '',
-
-                                '- WGs in ' + building_type + 'building type tend to be pricier' if building_type == 'Neubau' or building_type == 'Hochhaus' else '- WGs in ' + building_type + 'building type tend to be cheaper' if building_type == 'Einfamilienhaus' else '',
-
-                                '- Students WG type tend to be cheaper' if wg_type_studenten else '',
-
-                                '- Business WG type tend to be pricier' if wg_type_business else '',
-
-                                '- WGs that require Schufa tend to be pricier' if schufa_needed else '',
-
-                                '- WGs with companies as landlord tend to be pricier' if commercial_landlord else '',
-
-                                '- WGs with capacity for ' + str(capacity) + ' people tend to be pricier' if capacity >= 5 else '- WGs for only 2 people tend to be cheaper' if capacity == 2 else '',
-
-                                '- Short-term rental WGs (<30 days) tend to be cheaper' if days_available <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if days_available > 540 else '']
-
-                            return '\n'.join(text for text in prompts if text != '')
-
-                        col4.markdown(f"""
-                                        <font size= "4">{generate_text_possible_price_factors()}</font>
-                                        """, unsafe_allow_html=True)
-
-
-
-
-                    ## Make predictions
+                    # Predict expected cold_rent_euros
                     pred_price_sqm = float(trained_model.predict(ad_df_processed))
-                    cold_rent_pred = round(float(pred_price_sqm*ad_df_processed['size_sqm']),2)
-                    warm_rent_pred =  round(float(cold_rent_pred + ad_df_processed['mandatory_costs_euros'] + ad_df_processed['extra_costs_euros']),2)
+                    cold_rent_pred = int(float(pred_price_sqm*ad_df_processed['size_sqm']))
+
+                    # Calculate extra costs
+                    extra_costs_total = int(list(ad_df_processed['price_euros'])[0]) - int(list(ad_df_processed['cold_rent_euros'])[0])
+
+                    warm_rent_pred =  int(cold_rent_pred + extra_costs_total)
 
 
                     ## Ad evaluation
-                    ad_evaluation = 'over' if float(ad_df_processed['price_euros']) > warm_rent_pred*1.2 else 'under' if float(ad_df_processed['price_euros']) < warm_rent_pred*1.2 else 'fair'
+                    ad_evaluation = 'over' if int(ad_df_processed['price_euros']) > warm_rent_pred*1.2 else 'under' if int(ad_df_processed['price_euros']) < warm_rent_pred*1.2 else 'fair'
 
 
                     if ad_evaluation == 'over':
-                        ad_evaluation = f"***OVERPRICED***. Even after taking the margin of error in consideration, the rent price in this ad ({round(float(ad_df_processed['price_euros']),2)}€) is significantly above the price predicted by our model"
+                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
                     elif ad_evaluation == 'fair':
-                        ad_evaluation = f"***FAIRLY PRICED***. Taking the margin of error in consideration, the rent price in this ad ({round(float(ad_df_processed['price_euros']),2)}€) is within the price range predicted by our model"
+                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
                     elif ad_evaluation == 'under':
-                        ad_evaluation = f"***UNDERPRICED***. Even after taking the margin of error in consideration, the rent price in this ad ({round(float(ad_df_processed['price_euros']),2)}€) is significantly below the price predicted by our model"
+                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
 
                     # Display predictions
                     st.markdown(f"""
-                                The predicted rent for this offer is: ***{warm_rent_pred}***€. This prediction is composed of the predicted cold rent ({cold_rent_pred}€), plus mandatory and extra costs indicated in the ad.
-
-                                The offer in this ad is priced at {round(float(ad_df_processed['price_euros']),2)}€ (warm rent). We consider this price to be {ad_evaluation}.
+                                The predicted warm rent for this offer is: <span style="color:tomato">**{warm_rent_pred} €**</span>. This prediction is composed of the predicted cold rent ({cold_rent_pred} €), plus invariant mandatory and extra costs taken from the ad page. In the ad page, this WG room is priced at <span style="color:tomato">**{int(ad_df_processed['price_euros'])} €**</span> (warm rent). {ad_evaluation}.
                                 """, unsafe_allow_html=True)
 
-
-
-
-            else:
-                st.markdown("""
-                            There was a problem connecting to the provided link. Please submit a valid link to a WG ad from wg-gesucht.de.
-
-                            A valid link has the format "https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html", where the Neighborhood tag may or may not be present.
-
-                            Please get in contact if the problem persists.
+                    st.markdown(f"""
+                            <font size= "2">*There are two types of rent prices: cold and warm rent. Cold rent is the basic price of the rent, while warm rent usually includes the cold rent, water, heating and house maintenance costs. Warm rent may also include internet and TV/radio/internet taxes and other invariant costs.</font>
                             """, unsafe_allow_html=True)
+
+
+
+
+        else:
+            st.markdown("""
+                        There was a problem connecting to the provided link. Please submit a valid link to a WG ad from wg-gesucht.de.
+
+                        A valid link has the format "https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html", where the Neighborhood tag may or may not be present.
+
+                        Please get in contact if the problem persists.
+                        """, unsafe_allow_html=True)
 
 
 
 with tab2:
     st.markdown("""
-            ### Have you ever wondered how your room compares to the current WG market?
-            #### I've collected thousands of ads from wg-gesucht.de to answer that question for you.
+            ### Check how <span style="color:tomato">**your own WG room**</span> compares to thousands of other WG rooms ads posted on [WG-gesucht](https://www.wg-gesucht.de/).
             """, unsafe_allow_html=True)
 
     st.caption("""
@@ -893,90 +920,91 @@ with tab2:
         The more information you give the better the analysis is, but a basic analysis can already be performed with only very little information (marked by *).
                 """, unsafe_allow_html=True)
 
-    with st.form("flat_form", clear_on_submit=True):
-        placeholder = st.empty()
-        with placeholder.container():
-            st.subheader("""
-                    \n
-                    Location
-                    """)
-            col1, col2, col3, col4 = st.columns(4)
-            col1.selectbox(label="City*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0, key='city_own')
-            col2.text_input("Street and house number*", value="Example Str. 15", key='address', max_chars = 100)
-            col3.text_input("Neighborhood", value="", key='neighborhood', max_chars = 100)
-            col4.text_input("Zip code*", value="12345", key='zip_code', max_chars = 20)
-
-        placeholder = st.empty()
-        with placeholder.container():
-            st.subheader("""
-                    \n
-                    Information about the room and building
-                    """)
-            col1, col2, col3, col4 = st.columns(4)
-            col1.number_input(label='Room size (m²)*', min_value=0, max_value=60, value=0, step=1, key='room_size')
-            col2.number_input(label='Total flat/house size (m²)', min_value=0, max_value=250, value=0, step=1, key='total_flat_size')
-            col3.selectbox(label="Type of building", options=['<Please select>','Types of building here'], index=0, key='building_type')
-            col4.selectbox(label="Floor", options=['<Please select>','Basement', 'Low ground floor','Ground floor','High ground floor','1st floor','2nd floor','3rd floor','4th floor','5th floor','6th floor or higher','Attic'], index=0, key='floor')
-
-
-            col1.selectbox(label='Parking condition', options=['<Please select>','Good parking facilities', 'Bad parking facilities', 'Resident parking', 'Own parking', 'Underground parking'], index=0, key='parking')
-            col2.select_slider(label='Walking distance to public transport (in minutes)', options=[str(n) for n in range(1,61)], value='10', key='distance_public_transport')
-            col3.selectbox("Barrier-free", ['<Please select>','Suitable for wheelchair','Not suitable for wheelchair'], index=0, key='barrier_free')
-            col4.selectbox("Schufa requested?", ['<Please select>','Yes', 'No'], index=0, key='schufa_requested')
-
-
-        placeholder = st.empty()
-        with placeholder.container():
-            st.subheader("""
-                    \n
-                    WG-info
-                    """)
-            col1, col2, col3 = st.columns(3)
-            col1.select_slider(label='Female flatmates', options=[str(n) for n in range(0,11)], value='0', key='female_flatmates')
-            col2.select_slider(label='Male flatmates', options=[str(n) for n in range(0,11)], value='0', key='male_flatmates')
-            col3.select_slider(label='Diverse flatmates', options=[str(n) for n in range(0,11)], value='0', key='diverse_flatmates')
-            col1.select_slider(label='Flatmates min age', options=[str(n) for n in range(0,100)], value='0', key='min_age_flatmates')
-            col2.select_slider(label='Flatmates max age', options=[str(n) for n in range(0,100)], value='0', key='max_age_flatmates')
-            col3.selectbox("Smoking", ['<Please select>','Allowed everywhere', 'Allowed in your room', 'Allowed on the balcony', 'No smoking'], index=0, key='smoking')
+    with st.expander('WG room info', expanded=True):
+        with st.form("flat_form", clear_on_submit=False):
+            placeholder = st.empty()
+            with placeholder.container():
+                st.subheader("""
+                        \n
+                        Location
+                        """)
+                col1, col2, col3, col4 = st.columns(4)
+                col1.selectbox(label="City*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0, key='city_own')
+                col2.text_input("Street and house number*", value="Example Str. 15", key='address', max_chars = 100)
+                col3.text_input("Neighborhood", value="", key='neighborhood', max_chars = 100)
+                col4.text_input("Zip code*", value="12345", key='zip_code', max_chars = 20)
 
             placeholder = st.empty()
             with placeholder.container():
-                col1, col2 = st.columns(2)
-                col1.multiselect(label='Type of WG', options=['<Please select>','WG types'], default=None, key='wg_type')
-                col2.multiselect(label='Spoken languages', options=['<Please select>','Languages'], default=None, key='languages')
-
-        placeholder = st.empty()
-        with placeholder.container():
-            st.subheader("""
-                    \n
-                    Energy and power
-                    """)
-            col1, col2, col3, col4, col5 = st.columns(5)
-            col1.selectbox(label='Certification type', options=['<Please select>','Requirement','Consumption'], index=0, key='energy_certificate')
-            col2.text_input("Power (in kW h/(m²a))", value="", key='kennwert', max_chars = 20)
-            col3.multiselect(label='Heating energy source', options=['Energy sources'], default=None, key='energy_source')
-            col4.text_input(label='Building construction year', value="", key='building_year', max_chars = 20)
-            col5.multiselect(label='Energy efficiency class', options=['A+','A','B','C','D','E','F','G','H'], default=None, key='energy_efficiency')
+                st.subheader("""
+                        \n
+                        Information about the room and building
+                        """)
+                col1, col2, col3, col4 = st.columns(4)
+                col1.number_input(label='Room size (m²)*', min_value=0, max_value=60, value=0, step=1, key='room_size')
+                col2.number_input(label='Total flat/house size (m²)', min_value=0, max_value=250, value=0, step=1, key='total_flat_size')
+                col3.selectbox(label="Type of building", options=['<Please select>','Types of building here'], index=0, key='building_type')
+                col4.selectbox(label="Floor", options=['<Please select>','Basement', 'Low ground floor','Ground floor','High ground floor','1st floor','2nd floor','3rd floor','4th floor','5th floor','6th floor or higher','Attic'], index=0, key='floor')
 
 
+                col1.selectbox(label='Parking condition', options=['<Please select>','Good parking facilities', 'Bad parking facilities', 'Resident parking', 'Own parking', 'Underground parking'], index=0, key='parking')
+                col2.select_slider(label='Walking distance to public transport (in minutes)', options=[str(n) for n in range(1,61)], value='10', key='distance_public_transport')
+                col3.selectbox("Barrier-free", ['<Please select>','Suitable for wheelchair','Not suitable for wheelchair'], index=0, key='barrier_free')
+                col4.selectbox("Schufa requested?", ['<Please select>','Yes', 'No'], index=0, key='schufa_requested')
 
-        placeholder = st.empty()
-        with placeholder.container():
-            st.subheader("""
-                    \n
-                    Utils
-                    """)
-            col1, col2, col3 = st.columns(3)
-            col1.selectbox(label='Heating', options=['<Please select>','Central heating','Gas heating', 'Furnace heating', 'District heating', 'Coal oven', 'Night storage heating'], index=0, key='heating')
-            col1.multiselect(label='Internet', options=['DSL', 'Flatrate', 'WLAN'], default=None, key='internet')
-            col1.selectbox(label='Internet speed', options=['<Please select>','Slower than 10 Mbit/s','Up to 10 Mbit/s','Up to 16 Mbit/s','Up to 25 Mbit/s','Up to 50 Mbit/s','Up to 100 Mbit/s','Faster than 100 Mbit/s'], index=0, key='internet_speed')
-            col2.multiselect(label='Furniture', options=['Furnished', 'Partly furnished'], default=None, key='furniture')
-            col2.multiselect(label='Floor type', options=['Floor boards', 'Parquet', 'Laminate', 'Carpet', 'Tiles', 'PVC', 'Underfloor heating'], default=None, key='floor_type')
-            col3.multiselect(label='TV', options=['Cable', 'Satellite'], default=None, key='tv')
-            col3.multiselect(label='Miscellaneous', options=['Washing machine', 'Dishwasher', 'Terrace', 'Balcony', 'Garden', 'Shared garden', 'Basement', 'Elevator', 'Pets allowed', 'Bicycle storage'], default=None, key='extras')
 
-        "---"
-        submitted_form = st.form_submit_button("Submit form")
+            placeholder = st.empty()
+            with placeholder.container():
+                st.subheader("""
+                        \n
+                        WG-info
+                        """)
+                col1, col2, col3 = st.columns(3)
+                col1.select_slider(label='Female flatmates', options=[str(n) for n in range(0,11)], value='0', key='female_flatmates')
+                col2.select_slider(label='Male flatmates', options=[str(n) for n in range(0,11)], value='0', key='male_flatmates')
+                col3.select_slider(label='Diverse flatmates', options=[str(n) for n in range(0,11)], value='0', key='diverse_flatmates')
+                col1.select_slider(label='Flatmates min age', options=[str(n) for n in range(0,100)], value='20', key='min_age_flatmates')
+                col2.select_slider(label='Flatmates max age', options=[str(n) for n in range(0,100)], value='20', key='max_age_flatmates')
+                col3.selectbox("Smoking", ['<Please select>','Allowed everywhere', 'Allowed in your room', 'Allowed on the balcony', 'No smoking'], index=0, key='smoking')
+
+                placeholder = st.empty()
+                with placeholder.container():
+                    col1, col2 = st.columns(2)
+                    col1.multiselect(label='Type of WG', options=['WG types'], default=None, key='wg_type')
+                    col2.multiselect(label='Spoken languages', options=['<Please select>','German', 'English'], default=None, key='languages')
+
+            placeholder = st.empty()
+            with placeholder.container():
+                st.subheader("""
+                        \n
+                        Energy and power
+                        """)
+                col1, col2, col3, col4, col5 = st.columns(5)
+                col1.selectbox(label='Certification type', options=['<Please select>','Requirement','Consumption'], index=0, key='energy_certificate')
+                col2.text_input("Power (in kW h/(m²a))", value="", key='kennwert', max_chars = 5)
+                col3.selectbox(label='Heating energy source', options=['<Please select>','Energy source'], key='energy_source')
+                col4.text_input(label='Building construction year', value="", key='building_year', max_chars = 4)
+                col5.selectbox(label='Energy efficiency class', options=['<Please select>','A+','A','B','C','D','E','F','G','H'], key='energy_efficiency')
+
+
+
+            placeholder = st.empty()
+            with placeholder.container():
+                st.subheader("""
+                        \n
+                        Utils
+                        """)
+                col1, col2, col3 = st.columns(3)
+                col1.selectbox(label='Heating', options=['<Please select>','Central heating','Gas heating', 'Furnace heating', 'District heating', 'Coal oven', 'Night storage heating'], index=0, key='heating')
+                col1.multiselect(label='Internet', options=['DSL', 'Flatrate', 'WLAN'], default=None, key='internet')
+                col1.selectbox(label='Internet speed', options=['<Please select>','Slower than 10 Mbit/s','Up to 10 Mbit/s','Up to 16 Mbit/s','Up to 25 Mbit/s','Up to 50 Mbit/s','Up to 100 Mbit/s','Faster than 100 Mbit/s'], index=0, key='internet_speed')
+                col2.selectbox(label='Furniture', options=['<Please select>','Furnished', 'Partly furnished'], key='furniture')
+                col2.multiselect(label='Floor type', options=['Floor boards', 'Parquet', 'Laminate', 'Carpet', 'Tiles', 'PVC', 'Underfloor heating'], default=None, key='floor_type')
+                col3.multiselect(label='TV', options=['Cable', 'Satellite'], default=None, key='tv')
+                col3.multiselect(label='Miscellaneous', options=['Washing machine', 'Dishwasher', 'Terrace', 'Balcony', 'Garden', 'Shared garden', 'Basement', 'Elevator', 'Pets allowed', 'Bicycle storage'], default=None, key='extras')
+
+            "---"
+            submitted_form = st.form_submit_button("Submit form")
 
 
 

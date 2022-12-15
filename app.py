@@ -922,86 +922,98 @@ with tab2:
 
     with st.expander('WG room info', expanded=True):
         with st.form("flat_form", clear_on_submit=False):
-            placeholder = st.empty()
-            with placeholder.container():
+            with st.container():
                 st.subheader("""
                         \n
                         Location
                         """)
-                col1, col2, col3, col4 = st.columns(4)
-                col1.selectbox(label="City*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0, key='city_own')
-                col2.text_input("Street and house number*", value="Example Str. 15", key='address', max_chars = 100)
-                col3.text_input("Neighborhood", value="", key='neighborhood', max_chars = 100)
-                col4.text_input("Zip code*", value="12345", key='zip_code', max_chars = 20)
+                col1, col2, col3 = st.columns(3)
+                col1.selectbox(label="City/Ort*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0, key='city_own')
+                col2.text_input("Street and house number/Straße und Hausnummer*", value="Str. 15", key='address', max_chars = 100)
+                # col3.text_input("Neighborhood/Stadtteil", value="", key='neighborhood', max_chars = 100)
+                col3.text_input("Zip code/Postleitzahl*", value="12345", key='zip_code', max_chars = 20)
 
-            placeholder = st.empty()
-            with placeholder.container():
+
+            with st.container():
+                st.subheader("""
+                        \n
+                        Price and costs
+                        """)
+                col1, col2, col3, col4, col5 = st.columns(5)
+                col1.number_input(label='Total rent/Gesamtmiete (€)', value=0, step=1, key='price_euros')
+                col2.number_input(label='Cold rent/Kaltmiete (€)', value=0, step=1, key='cold_rent_euros')
+                col3.number_input(label='Mandatory costs/Nebenkosten (€)', value=0, step=1, key='mandatory_costs_euros')
+                col4.number_input(label='Extra costs/Sonstige Kosten (€)', value=0, step=1, key='extra_costs_euros')
+                col5.number_input(label='Deposit/Kaution (€)', value=0, step=1, key='deposit')
+
+            with st.container():
                 st.subheader("""
                         \n
                         Information about the room and building
                         """)
                 col1, col2, col3, col4 = st.columns(4)
-                col1.number_input(label='Room size (m²)*', min_value=0, max_value=60, value=0, step=1, key='room_size')
-                col2.number_input(label='Total flat/house size (m²)', min_value=0, max_value=250, value=0, step=1, key='total_flat_size')
-                col3.selectbox(label="Type of building", options=['<Please select>','Types of building here'], index=0, key='building_type')
-                col4.selectbox(label="Floor", options=['<Please select>','Basement', 'Low ground floor','Ground floor','High ground floor','1st floor','2nd floor','3rd floor','4th floor','5th floor','6th floor or higher','Attic'], index=0, key='floor')
+                col1.number_input(label='Room size/Zimmergröße (m²)*', min_value=0, max_value=60, value=0, step=1, key='size_sqm')
+                col2.number_input(label='Flat size/Wohnungsgröße (m²)', min_value=0, max_value=250, value=0, step=1, key='total_flat_size')
+                col3.selectbox(label="Type of building/Haustyp", options=['<Please select>','Altbau', 'sanierter Altbau', 'Neubau', 'Reihenhaus', 'Doppelhaus', 'Einfamilienhaus', 'Mehrfamilienhaus', 'Hochhaus', 'Plattenbau'], index=0, key='building_type')
 
 
-                col1.selectbox(label='Parking condition', options=['<Please select>','Good parking facilities', 'Bad parking facilities', 'Resident parking', 'Own parking', 'Underground parking'], index=0, key='parking')
-                col2.select_slider(label='Walking distance to public transport (in minutes)', options=[str(n) for n in range(1,61)], value='10', key='distance_public_transport')
-                col3.selectbox("Barrier-free", ['<Please select>','Suitable for wheelchair','Not suitable for wheelchair'], index=0, key='barrier_free')
-                col4.selectbox("Schufa requested?", ['<Please select>','Yes', 'No'], index=0, key='schufa_requested')
 
 
-            placeholder = st.empty()
-            with placeholder.container():
+                col4.selectbox(label="Floor/Etage", options=['<Please select>','Basement/Keller', 'Low ground floor/Tiefparterre','Ground floor/EG','High ground floor/Hochparterre','1st floor/1. OG','2nd floor/2. OG','3rd floor/3. OG','4th floor/4. OG','5th floor/5. OG','6th floor or higher/höher als 5. OG','Attic/Dachgeschoss'], index=0, key='floor')
+
+
+                col1.selectbox(label='Parking condition/Parksituation', options=['<Please select>','Good parking facilities', 'Bad parking facilities', 'Resident parking', 'Own parking', 'Underground parking'], index=0, key='parking')
+                col2.select_slider(label='Walking distance to public transport/ÖPNV (minutes)', options=[str(n) for n in range(1,61)], value='10', key='distance_public_transport')
+                col3.selectbox("Barrier-free/Barrierefrei ", ['<Please select>','Suitable for wheelchair/geeignet für Rollstuhlfaher','Not suitable for wheelchair/ungeeignet für Rollstuhlfaher'], index=0, key='barrier_free')
+                col4.selectbox("Schufa requested/erwünscht", ['<Please select>','Yes', 'No'], index=0, key='schufa_requested')
+
+            with st.container():
                 st.subheader("""
                         \n
                         WG-info
                         """)
                 col1, col2, col3 = st.columns(3)
-                col1.select_slider(label='Female flatmates', options=[str(n) for n in range(0,11)], value='0', key='female_flatmates')
-                col2.select_slider(label='Male flatmates', options=[str(n) for n in range(0,11)], value='0', key='male_flatmates')
-                col3.select_slider(label='Diverse flatmates', options=[str(n) for n in range(0,11)], value='0', key='diverse_flatmates')
-                col1.select_slider(label='Flatmates min age', options=[str(n) for n in range(0,100)], value='20', key='min_age_flatmates')
-                col2.select_slider(label='Flatmates max age', options=[str(n) for n in range(0,100)], value='20', key='max_age_flatmates')
-                col3.selectbox("Smoking", ['<Please select>','Allowed everywhere', 'Allowed in your room', 'Allowed on the balcony', 'No smoking'], index=0, key='smoking')
+                col1.select_slider(label='Female flatmates/weibliche Mitbewohnerin', options=[str(n) for n in range(0,11)], value='0', key='female_flatmates')
+                col2.select_slider(label='Male flatmates/männlicher Mitbewohner', options=[str(n) for n in range(0,11)], value='0', key='male_flatmates')
+                col3.select_slider(label='Diverse flatmates/diverse Mitbewohner', options=[str(n) for n in range(0,11)], value='0', key='diverse_flatmates')
+                col1.select_slider(label='Mininum age/Mindestalter', options=[str(n) for n in range(0,100)], value='20', key='min_age_flatmates')
+                col2.select_slider(label='Maximal age/Höchstalter', options=[str(n) for n in range(0,100)], value='20', key='max_age_flatmates')
+                col3.selectbox("Smoking/Rauchen", ['<Please select>','Allowed everywhere', 'Allowed in your room', 'Allowed on the balcony', 'No smoking'], index=0, key='smoking')
 
                 placeholder = st.empty()
                 with placeholder.container():
                     col1, col2 = st.columns(2)
-                    col1.multiselect(label='Type of WG', options=['WG types'], default=None, key='wg_type')
-                    col2.multiselect(label='Spoken languages', options=['<Please select>','German', 'English'], default=None, key='languages')
+                    col1.multiselect(label='WG types/WG-Arten', options=['Studenten-WG','Berufstätigen-WG','Zweck-WG','keine Zweck-WG','gemischte WG','Frauen-WG','Männer-WG','WG mit Kindern','Plus-WG','Business-WG','Verbindung','Mehrgenerationen','Wohnheim','LGBTQIA+','Azubi-WG','Vegetarisch/Vegan','Senioren-WG','Wohnen für Hilfe','Alleinerziehende','inklusive WG','Internationals welcome','funktionale WG','WG-Neugründung'], default=None, key='wg_type')
+                    col2.multiselect(label='Languages/Sprachen', options=['German/Deutsch', 'English/Englisch','Spanish/Spanisch', 'Italian/Italienisch', 'French/Französisch', 'Turkish/Türkisch', 'Albanian/Albanisch', 'Arabic/Arabisch','Bengali', 'Bosnian/Bosnisch','Chinese/Chinesisch', 'Finish/Finnisch','Greek/Griechisch', 'Hindi','Danish/Dänisch', 'Japansese/Japanisch','Croatian/Kroatisch', 'Dutch/Niederländisch','Norwegian/Norwegisch', 'Polish/Polnisch','Portuguese/Portugiesisch', 'Romenian/Rumänisch','Russian/Russisch','Swedish/Schwedisch', 'Serbian/Serbisch','Slovenian/Slowenisch','Czech/Tschechisch', 'Hungarian/Ungarisch','Sign language/Gebärdensprache'], default=None, key='languages')
 
-            placeholder = st.empty()
-            with placeholder.container():
+            with st.container():
                 st.subheader("""
                         \n
                         Energy and power
                         """)
-                col1, col2, col3, col4, col5 = st.columns(5)
-                col1.selectbox(label='Certification type', options=['<Please select>','Requirement','Consumption'], index=0, key='energy_certificate')
-                col2.text_input("Power (in kW h/(m²a))", value="", key='kennwert', max_chars = 5)
-                col3.selectbox(label='Heating energy source', options=['<Please select>','Energy source'], key='energy_source')
-                col4.text_input(label='Building construction year', value="", key='building_year', max_chars = 4)
-                col5.selectbox(label='Energy efficiency class', options=['<Please select>','A+','A','B','C','D','E','F','G','H'], key='energy_efficiency')
+                col1, col2, col3 = st.columns(3)
+                col1.selectbox(label='Certification type/Energieausweistyp', options=['<Please select>','Requirement/Bedarfausweis','Consumption/Verbrauchausweis'], index=0, key='energy_certificate')
+                col1.selectbox(label='Heating energy source/Energieträger der Heizung', options=['<Please select>','Oil/Öl','Geothermal/Erdwärme','Solar','Wood pellets/Holzpellets','Gas','Steam district heating/Fernwärme-Dampft','Distant district heating/Fernwärme','Coal/Kohle','Light natural gas/Erdgas leicht','Heavy natural gas/Erdgas schwer','LPG/Flüssiggas','Wood/Holz','Wood chips/Holz-Hackschnitzel','Local district heating/Nahwärme','Delivery/Wärmelieferung','Eletricity/Strom'], key='heating_energy_source')
+                col2.text_input("Power/Kennwert (kW h/(m²a))", value="", key='kennwert', max_chars = 5)
+                col2.text_input(label='Building construction year/Baujahr des Gebäudes', value="", key='building_year', max_chars = 4)
+                col3.selectbox(label='Energy efficiency class/Energieeffizienzklasse', options=['<Please select>','A+','A','B','C','D','E','F','G','H'], key='energy_efficiency')
 
-
-
-            placeholder = st.empty()
-            with placeholder.container():
+            with st.container():
                 st.subheader("""
                         \n
                         Utils
                         """)
                 col1, col2, col3 = st.columns(3)
-                col1.selectbox(label='Heating', options=['<Please select>','Central heating','Gas heating', 'Furnace heating', 'District heating', 'Coal oven', 'Night storage heating'], index=0, key='heating')
+                col1.selectbox(label='Heating/Heizung', options=['<Please select>','Central heating/Zentralheizung','Gas heating/Gasheizung', 'Furnace heating/Ofenheizung', 'District heating/Fernwärme', 'Coal oven/Kohleofen', 'Night storage heating/Nachtspeicherofen'], index=0, key='heating')
+
+
+
                 col1.multiselect(label='Internet', options=['DSL', 'Flatrate', 'WLAN'], default=None, key='internet')
-                col1.selectbox(label='Internet speed', options=['<Please select>','Slower than 10 Mbit/s','Up to 10 Mbit/s','Up to 16 Mbit/s','Up to 25 Mbit/s','Up to 50 Mbit/s','Up to 100 Mbit/s','Faster than 100 Mbit/s'], index=0, key='internet_speed')
-                col2.selectbox(label='Furniture', options=['<Please select>','Furnished', 'Partly furnished'], key='furniture')
-                col2.multiselect(label='Floor type', options=['Floor boards', 'Parquet', 'Laminate', 'Carpet', 'Tiles', 'PVC', 'Underfloor heating'], default=None, key='floor_type')
-                col3.multiselect(label='TV', options=['Cable', 'Satellite'], default=None, key='tv')
-                col3.multiselect(label='Miscellaneous', options=['Washing machine', 'Dishwasher', 'Terrace', 'Balcony', 'Garden', 'Shared garden', 'Basement', 'Elevator', 'Pets allowed', 'Bicycle storage'], default=None, key='extras')
+                col1.selectbox(label='DSL-Speed', options=['<Please select>','Slower than 10 Mbit/s','Up to 10 Mbit/s','Up to 16 Mbit/s','Up to 25 Mbit/s','Up to 50 Mbit/s','Up to 100 Mbit/s','Faster than 100 Mbit/s'], index=0, key='internet_speed')
+                col2.multiselect(label='Furniture/Einrichtung', options=['<Please select>','Furnished/Möbliert', 'Partly furnished/Teilmöbliert'], key='furniture')
+                col2.multiselect(label='Floor type/Bodenbelag', options=['Floorboards/Dielen', 'Parquet/Parkett', 'Laminate/Laminat', 'Carpet/Teppich', 'Tiles/Fliesen', 'PVC', 'Underfloor heating/Fußbodenheizung'], default=None, key='floor_type')
+                col3.multiselect(label='TV', options=['Cable TV/Kabel TV', 'Satellite TV/Satellit TV'], default=None, key='tv')
+                col3.multiselect(label='Miscellaneous/Sonstiges', options=['Washing machine/Waschmaschine', 'Dishwasher/Spülmaschine', 'Terrace/Terrasse', 'Balcony/Balkon', 'Garden/Garten', 'Shared garden/Gartenmitbenutzung', 'Basement/Keller', 'Elevator/Aufzug', 'Pets allowed/Haustiere erlaubt', 'Bicycle storage/Fahrradkeller'], default=None, key='extras')
 
             "---"
             submitted_form = st.form_submit_button("Submit form")
@@ -1010,6 +1022,10 @@ with tab2:
 
 
     if submitted_form:
+        ###############################
+        ### Aggregate inputted info ###
+        ###############################
+
         #############################
         ### Obtain main ads table ###
         #############################
@@ -1030,6 +1046,10 @@ with tab2:
             st.markdown("""
             The zip code is mandatory for analysis.
             """, unsafe_allow_html=True)
+        elif str(st.session_state.price_euros) == 0:
+            st.markdown("""
+            The warm rent is mandatory for analysis.
+            """, unsafe_allow_html=True)
         # elif ~str(st.session_state.zip_code).isnumeric():
         #     st.markdown(f"""
         #     The zip code provided is invalid: {st.session_state.zip_code}.
@@ -1041,19 +1061,15 @@ with tab2:
 
             lat, lon = geocoding_address(full_address)
 
-            if lat != lat and lon != lon: # Check if lat and lon are nan
-                st.markdown(f"""
-                The provided address is incorrect: {full_address}
-                """, unsafe_allow_html=True)
-
+            if lat == lat and lon != lon: # Check if lat and lon are not nan
                 detail_dict = {
                 'id': [''],
                 'url': [''],
                 'type_offer': ['WG'],
                 'landlord_type': ['Private'],
                 'title': [''],
-                'price_euros': [np.nan],
-                'size_sqm': [int(st.session_state.room_size)],
+                'price_euros': [int(st.session_state.price_euros)],
+                'size_sqm': [int(st.session_state.size_sqm)],
                 'available_rooms': [1],
                 'WG_size': [int(st.session_state.total_flat_size)],
                 'available_spots_wg': [1],
@@ -1093,9 +1109,21 @@ with tab2:
                 # floor_type
                 # extras
 
+
+
+
                 st.markdown("""
                         ### Page under construction.
                         """, unsafe_allow_html=True)
+
+
+
+
+
+            else:
+                st.markdown(f"""
+                The provided address is invalid: {full_address}
+                """, unsafe_allow_html=True)
 
 
 

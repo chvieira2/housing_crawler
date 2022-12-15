@@ -607,9 +607,9 @@ st.markdown("""
 ###############################################
 ### Creates the different tabs with results ###
 ###############################################
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Analyse URL", "Compare my home to the market",
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Analyse WG from url link", "Analyse my own WG",
                                         "Overview of the WG market",
-                                        'Predictive model of WG prices', 'About'])
+                                        'The predictive model of WG prices', 'About'])
 
 with tab1:
     st.markdown("""
@@ -621,47 +621,227 @@ with tab1:
 
         submitted_url = st.form_submit_button("Submit url")
 
+
+
+
         if submitted_url:
 
-            url = st.session_state["url"]
+
+            #### Preparing for analysis ####
+            url = str(st.session_state["url"])
             url_ok = False
-            if url == '':
+            if url == '' or url == 'https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html' or not url.startswith('https://www.wg-gesucht.de'):
                 st.markdown("""
-                    Please submit a valid wg-gesucht.de url.
+                    Please submit a valid link to a WG ad from wg-gesucht.de.
+
+                    A valid link has the format "https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html", where the Neighborhood tag may or may not be present.
                     """, unsafe_allow_html=True)
-                url_ok = False
-            elif 'wg-gesucht.de' in url:
-                url_ok = True
+
+            elif not url.startswith('https://www.wg-gesucht.de/wg-zimmer-'):
+                st.markdown("""
+                    The ad is not a WG. At the moment only WGs are supported.
+                    """, unsafe_allow_html=True)
+
             else:
-                st.markdown("""
-                    The link must be from wg-gesucht.de
-                    """, unsafe_allow_html=True)
+                url_ok = True
 
 
             if url_ok:
-                st.markdown(f'Analysing {url}', unsafe_allow_html=True)
+                st.markdown(f"""
+                            Analysing {url}. This could take a minute.
+                            """, unsafe_allow_html=True)
 
 
                 ## Process url to obtain table for prediction
                 ad_df = crawl_ind_ad_page2(url)
 
+                ad_df_processed = None
                 try:
                     ## Process ad_df for analysis
                     ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats_tag = 'city')
 
+                except Exception as err:
+                    st.markdown(f"""
+                            The analysis failed. Most common reasons for analysis to fail are wrong entries in the original ad in wg-gesucht.de.
+
+                            Examples of entries in the ad that lead to failed analysis:
+                            - Rent price too low or too high
+                            - Room size is unrealistically large/small
+                            - Invalid entries in other fields
+
+                            Please get in contact if you think none of these reasons apply in your case.
+                            """, unsafe_allow_html=True)
+                    print(f"Unexpected {err=}, {type(err)=}")
+                    raise
+
+
+
+                if ad_df_processed is not None:
+
+            #### Collect files needed for analysis ####
                     ### Obtain main ads table ###
                     # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
                     ads_df = get_data_from_db().copy()
+                    ### Filter data for analysis ###
+                    ## WGs only
+                    ads_df = ads_df[ads_df['type_offer_simple'] == 'WG']
+
+                    ## Remove ad of interest from database
+                    ads_df = ads_df[ads_df['id'] != list(ad_df_processed['id'])[0]]
 
 
-                    #### Filter data for analysis
-                    df_filtered = filter_original_data(df = ads_df,
-                                                        city = 'Germany',
-                                                        time_period = 'Past three months')
+                    ## Filter for past 3 months only
+                    # Format dates properly
+                    ads_df['published_on'] = pd.to_datetime(ads_df['published_on'], format = "%Y-%m-%d")
+                    date_three_months_ago = datetime.date.today() + relativedelta(months=-3)
+                    ads_df_3_months = ads_df[ads_df['published_on'] >= pd.to_datetime(date_three_months_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
 
 
-                    ## Load model for prediction locally. I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
+
+                    ### Load model for prediction locally ###
+                    # I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
                     trained_model = get_latest_model_from_db()
+
+            #### Analysis ####
+                    placeholder = st.empty()
+                    with placeholder.container():
+                        st.subheader(f"""
+                                This is how your WG compares to other WGs published in the past three months:
+                                """)
+                        col1, col2, col3, col4 = st.columns(4)
+
+                #### Number ads ####
+                        ## Same city
+                        ads_df_city = ads_df_3_months[ads_df_3_months['city'] == list(ad_df_processed['city'])[0]]
+                        n_posts_city = len(ads_df_city)
+                        n_days_post_city = round(90/n_posts_city,1)
+                        n_hours_post_city = round((24*90)/n_posts_city,1)
+
+                        ## Same zip
+                        ads_df_zip_code = ads_df_3_months[ads_df_3_months['zip_code'] == list(ad_df_processed['zip_code'])[0]]
+                        n_posts_zipcode = len(ads_df_zip_code)
+                        n_days_post_zipcode = round(90/n_posts_zipcode,1)
+                        n_hours_post_zipcode = round((24*90)/n_posts_zipcode,1)
+
+                        col1.markdown(f"""
+                                <font size= "4">**Number of ads posted**</font>
+                                """, unsafe_allow_html=True)
+
+                        col1.markdown(f"""
+                                <font size= "4">On average, <span style="color:tomato">**{n_hours_post_city if n_days_post_city <= 1 else n_days_post_city}**</span> WG ads in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> were posted every {'hour' if n_days_post_city <= 1 else 'day'}.
+
+                                <span style="color:tomato">**{n_hours_post_zipcode if n_days_post_zipcode <= 1 else n_days_post_zipcode}**</span> WG ads were posted every {'hour' if n_days_post_zipcode <= 1 else 'day'} with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                                """, unsafe_allow_html=True)
+
+                #### Size room ####
+                        ## Smaller size
+                        ads_df_smaller = ads_df_3_months[ads_df_3_months['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+                        percent_smaller = round(100*(len(ads_df_smaller)/len(ads_df_3_months)),1)
+
+                        ## Smaller zip_code
+                        ads_df_smaller_zipcode = ads_df_zip_code[ads_df_zip_code['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+                        percent_smaller_zipcode = round(100*(len(ads_df_smaller_zipcode)/len(ads_df_zip_code)),1)
+
+                        col2.markdown(f"""
+                                <font size= "4">**Size of the room**</font>
+                                """, unsafe_allow_html=True)
+
+                        col2.markdown(f"""
+                                <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG is bigger than <span style="color:tomato">**{percent_smaller} %**</span> of WG ads published in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_smaller_zipcode} %**</span> of WG ads published with the ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                                """, unsafe_allow_html=True)
+
+                #### Price ####
+                        ## Cheaper city
+                        ads_df_cheaper = ads_df_3_months[ads_df_3_months['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+                        percent_cheaper = round(100*(len(ads_df_cheaper)/len(ads_df_3_months)),1)
+
+                        ## Cheaper zip_code
+                        ads_df_cheaper_zipcode = ads_df_zip_code[ads_df_zip_code['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+                        percent_cheaper_zipcode = round(100*(len(ads_df_cheaper_zipcode)/len(ads_df_zip_code)),1)
+
+                        col3.markdown(f"""
+                                <font size= "4">**WG price**</font>
+                                """, unsafe_allow_html=True)
+
+                        col3.markdown(f"""
+                                <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG is more expensive than <span style="color:tomato">**{percent_cheaper} %**</span> of WG ads published in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_cheaper_zipcode} %**</span> of WG ads published with the ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                                """, unsafe_allow_html=True)
+
+                #### Factors influencing price ####
+                        # Size
+                        wg_is_large = True if percent_smaller_zipcode > 50 else False
+
+                        # Location
+                        ads_df_not_zip_code = ads_df_city[ads_df_city['zip_code'] != list(ad_df_processed['zip_code'])[0]]
+                        ads_df_not_zip_code = ads_df_not_zip_code[ads_df_not_zip_code['zip_code'].notna()]
+                        mean_zip_code = ads_df_zip_code['price_euros'].mean()
+                        mean_not_zip_code = ads_df_not_zip_code['price_euros'].mean()
+
+                        import scipy.stats as stats
+                        #perform two sample t-test with equal variances
+                        p_value = stats.ttest_ind(a=ads_df_zip_code['price_euros'], b=ads_df_not_zip_code['price_euros'], equal_var = True, nan_policy = 'omit', random_state = 42)
+                        if p_value[1] <=0.05:
+                            if mean_zip_code > mean_not_zip_code:
+                                zip_is_more = 'pricier'
+                            else:
+                                zip_is_more = 'cheaper'
+                        else:
+                            zip_is_more = 'similar'
+
+
+
+                        # schufa_needed
+                        schufa_needed = str(list(ad_df_processed['schufa_needed'])[0]) == '1'
+
+                        # commercial_landlord
+                        commercial_landlord = str(list(ad_df_processed['commercial_landlord'])[0]) == '1'
+
+                        # capacity
+                        capacity = int(list(ad_df_processed['capacity'])[0])
+
+                        # days_available
+                        days_available = int(list(ad_df_processed['days_available'])[0])
+
+                        # wg_type_studenten
+                        wg_type_studenten = str(list(ad_df_processed['wg_type_studenten'])[0]) == '1'
+
+                        # wg_type_business
+                        wg_type_business = str(list(ad_df_processed['wg_type_business'])[0]) == '1'
+
+                        # building_type
+                        building_type = str(list(ad_df_processed['building_type'])[0])
+
+
+                        col4.markdown(f"""
+                                <font size= "4">**Possible price factors**</font>
+                                """, unsafe_allow_html=True)
+
+
+                        def generate_text_possible_price_factors():
+                            prompts = ['\n','- Room is large' if percent_smaller_zipcode >= 70 else '- Room is small' if percent_smaller_zipcode <= 30 else '' +\
+                                '- WG in pricier neighborhood' if zip_is_more == 'pricier' else '- WG in cheaper neighborhood' if zip_is_more == 'cheaper' else '',
+
+                                '- WGs in ' + building_type + 'building type tend to be pricier' if building_type == 'Neubau' or building_type == 'Hochhaus' else '- WGs in ' + building_type + 'building type tend to be cheaper' if building_type == 'Einfamilienhaus' else '',
+
+                                '- Students WG type tend to be cheaper' if wg_type_studenten else '',
+
+                                '- Business WG type tend to be pricier' if wg_type_business else '',
+
+                                '- WGs that require Schufa tend to be pricier' if schufa_needed else '',
+
+                                '- WGs with companies as landlord tend to be pricier' if commercial_landlord else '',
+
+                                '- WGs with capacity for ' + str(capacity) + ' people tend to be pricier' if capacity >= 5 else '- WGs for only 2 people tend to be cheaper' if capacity == 2 else '',
+
+                                '- Short-term rental WGs (<30 days) tend to be cheaper' if days_available <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if days_available > 540 else '']
+
+                            return '\n'.join(text for text in prompts if text != '')
+
+                        col4.markdown(f"""
+                                        <font size= "4">{generate_text_possible_price_factors()}</font>
+                                        """, unsafe_allow_html=True)
+
+
 
 
                     ## Make predictions
@@ -689,23 +869,16 @@ with tab1:
                                 """, unsafe_allow_html=True)
 
 
-                except Exception as err:
-                    st.markdown(f"""
-                            The analysis failed. Most common reasons for analysis to fail are wrong entries in the original ad in wg-gesucht.de.
-
-                            Examples of entries in the ad that lead to failed analysis:
-                            - Rent price too low or too high
-                            - Room size is unrealistically large/small
-                            - Invalid entries
-                            """, unsafe_allow_html=True)
-                    print(f"Unexpected {err=}, {type(err)=}")
-                    raise
-
-
 
 
             else:
-                st.markdown("There was a problem connecting to the provided link. The url should look similar to this: 'https://www.wg-gesucht.de/wg-zimmer-in-City.1234567.html'", unsafe_allow_html=True)
+                st.markdown("""
+                            There was a problem connecting to the provided link. Please submit a valid link to a WG ad from wg-gesucht.de.
+
+                            A valid link has the format "https://www.wg-gesucht.de/wg-zimmer-in-City-Neighborhood.1234567.html", where the Neighborhood tag may or may not be present.
+
+                            Please get in contact if the problem persists.
+                            """, unsafe_allow_html=True)
 
 
 
@@ -716,7 +889,7 @@ with tab2:
             """, unsafe_allow_html=True)
 
     st.caption("""
-        Information submitted by you is not stored anywhere and won't be used for anything else other than this analysis.
+        Information submitted by you in this session is not stored anywhere and won't be used for anything else other than the analysis shown here.
         The more information you give the better the analysis is, but a basic analysis can already be performed with only very little information (marked by *).
                 """, unsafe_allow_html=True)
 
@@ -1130,7 +1303,6 @@ with tab4:
                                             fig_height = 5,
                                             order='mean',
                                             font_scale=1.5))
-
 
 
 

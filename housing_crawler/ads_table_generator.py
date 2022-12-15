@@ -111,6 +111,12 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = 
     This function iterates through all folders of each city and saves the corresponding csvs into a single csv file.
     '''
 
+    print("\n======================================")
+    print("========= Encoding ads table =========")
+    print("======================================\n")
+
+
+
     year = time.strftime(f"%Y", time.localtime())
     month = time.strftime(f"%m", time.localtime())
     # for year in ['2022']:#,'2023']:
@@ -141,12 +147,27 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = 
 
 
     save_file(all_ads_df, f'{year}{month}_ads_encoded.csv', local_file_path='raw_data')
+    print("\n###############################################")
+    print("######### Finished encoding ads table #########")
+    print("###############################################\n")
 
     if create_OSM_table:
+        print("\n========================================")
+        print("========= Processing ads table =========")
+        print("========================================\n")
         process_ads_tables(all_ads_df)
+        print("\n#################################################")
+        print("######### Finished processing ads table #########")
+        print("#################################################\n")
 
     if train_model:
+        print("\n==========================================")
+        print("========= Training weekly models =========")
+        print("==========================================\n")
         train_models()
+        print("\n###################################################")
+        print("######### Finished updating weekly models #########")
+        print("###################################################\n")
 
 def long_search(day_stop_search = '01.01.2024', start_search_from_index = 0):
     '''

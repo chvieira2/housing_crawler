@@ -54,10 +54,7 @@ def get_soup_from_url( url, sess = None, sleep_times = (1,2)):
     if sess == None:
         sess = requests.session()
 
-    # Sleeping for random seconds to avoid overload of requests
-    sleeptime = np.random.uniform(sleep_times[0], sleep_times[1])
-    print(f"Waiting {round(sleeptime,2)} seconds to try connecting to:\n{url}")
-    time.sleep(sleeptime)
+    print(f"Connecting to: {url}")
 
     # Load page
     user_agent_rotator = UserAgent(popularity=[Popularity.COMMON.value],

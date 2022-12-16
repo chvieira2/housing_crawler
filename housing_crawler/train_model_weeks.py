@@ -50,7 +50,7 @@ def train_models():
         else:
             ## Check if week's model has been previously trained
             try:
-                trained_model = pickle.load(open(f'{ROOT_DIR}/model/trained_models/Pipeline_Ridge_trained_{week_number}.pkl','rb'))
+                trained_model = pickle.load(open(f'{ROOT_DIR}/model/trained_models/Ridge/Pipeline_Ridge_trained_{week_number}.pkl','rb'))
                 pass
             except:
                 print(f"Pipeline_Ridge_trained_{week_number}.pkl doesn't exist. Creating it.")
@@ -64,7 +64,7 @@ def train_models():
                 trained_model = prep_pipeline.fit(ads_df_filtered_week.drop(columns='price_per_sqm_cold'), ads_df_filtered_week['price_per_sqm_cold'])
 
                 # Save (dump) trained model for that week
-                with open(f"{ROOT_DIR}/model/trained_models/Pipeline_Ridge_trained_{week_number}.pkl", "wb") as file:
+                with open(f"{ROOT_DIR}/model/trained_models/Ridge/Pipeline_Ridge_trained_{week_number}.pkl", "wb") as file:
                     pickle.dump(trained_model, file)
 
 

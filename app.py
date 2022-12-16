@@ -587,6 +587,18 @@ def my_boxplot(df, x, x_title, y='price_per_sqm_cold', transform_type=None,
 
     return fig
 
+def selectbox_to_simplified_german(feature : str):
+
+    if feature == '<Please select>':
+        return np.nan
+    else:
+        try:
+            feature_list = feature.split('/')[1]
+            return feature_list if len(feature_list) > 0 else np.nan
+        except IndexError:
+            feature_list =  feature[0]
+            return feature_list if feature_list != '' else np.nan
+
 
 # ---------------------- PAGE START ----------------------
 st.markdown("""
@@ -653,6 +665,7 @@ with tab1:
                 try:
                     ## Process ad_df for analysis
                     ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats_tag = 'city')
+                    ad_df_processed
                     st.success('Analysis was successful!', icon="✅")
 
                 except Exception as err:
@@ -928,10 +941,13 @@ with tab2:
                         Location
                         """)
                 col1, col2, col3 = st.columns(3)
-                col1.selectbox(label="City/Ort*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0, key='city_own')
-                col2.text_input("Street and house number/Straße und Hausnummer*", value="Str. 15", key='address', max_chars = 100)
+                _city = col1.selectbox(label="City/Ort*", options=['<Please select>']+sorted(list(dict_city_number_wggesucht.keys())), index=0)
+
+                _street_number = col2.text_input("Street and house number/Straße und Hausnummer*", value="Str 15", max_chars = 100)
+
                 # col3.text_input("Neighborhood/Stadtteil", value="", key='neighborhood', max_chars = 100)
-                col3.text_input("Zip code/Postleitzahl*", value="12345", key='zip_code', max_chars = 20)
+
+                _zip_code = col3.text_input("Zip code/Postleitzahl*", value="12345", max_chars = 20)
 
 
             with st.container():
@@ -939,12 +955,19 @@ with tab2:
                         \n
                         Price and costs
                         """)
-                col1, col2, col3, col4, col5 = st.columns(5)
-                col1.number_input(label='Total rent/Gesamtmiete (€)', value=0, step=1, key='price_euros')
-                col2.number_input(label='Cold rent/Kaltmiete (€)', value=0, step=1, key='cold_rent_euros')
-                col3.number_input(label='Mandatory costs/Nebenkosten (€)', value=0, step=1, key='mandatory_costs_euros')
-                col4.number_input(label='Extra costs/Sonstige Kosten (€)', value=0, step=1, key='extra_costs_euros')
-                col5.number_input(label='Deposit/Kaution (€)', value=0, step=1, key='deposit')
+                col1, col2, col3 = st.columns(3)
+                _price_euros = col1.number_input(label='Total rent/Gesamtmiete (€)*', value=0, step=1)
+
+                _cold_rent_euros = col2.number_input(label='Cold rent/Kaltmiete (€)', value=0, step=1)
+
+                _mandatory_costs_euros = col3.number_input(label='Mandatory costs/Nebenkosten (€)', value=0, step=1)
+
+                _extra_costs_euros = col1.number_input(label='Extra costs/Sonstige Kosten (€)', value=0, step=1)
+
+                _transfer_costs_euros = col2.number_input(label='Transfer costs/Ablösevereinbarung (€)', value=0, step=1)
+
+                _deposit = col3.number_input(label='Deposit/Kaution (€)', value=0, step=1)
+
 
             with st.container():
                 st.subheader("""
@@ -952,20 +975,30 @@ with tab2:
                         Information about the room and building
                         """)
                 col1, col2, col3, col4 = st.columns(4)
-                col1.number_input(label='Room size/Zimmergröße (m²)*', min_value=0, max_value=60, value=0, step=1, key='size_sqm')
-                col2.number_input(label='Flat size/Wohnungsgröße (m²)', min_value=0, max_value=250, value=0, step=1, key='total_flat_size')
-                col3.selectbox(label="Type of building/Haustyp", options=['<Please select>','Altbau', 'sanierter Altbau', 'Neubau', 'Reihenhaus', 'Doppelhaus', 'Einfamilienhaus', 'Mehrfamilienhaus', 'Hochhaus', 'Plattenbau'], index=0, key='building_type')
+                _size_sqm = col1.number_input(label='Room size/Zimmergröße (m²)*', min_value=0, max_value=60, value=0, step=1)
+
+                _home_total_size = col2.number_input(label='Flat size/Wohnungsgröße (m²)', min_value=0, max_value=250, value=0, step=1)
+
+                _building_type = col3.selectbox(label="Type of building/Haustyp", options=['<Please select>','Altbau', 'sanierter Altbau', 'Neubau', 'Reihenhaus', 'Doppelhaus', 'Einfamilienhaus', 'Mehrfamilienhaus', 'Hochhaus', 'Plattenbau'], index=0)
+                _building_type = '' if _building_type == '<Please select>' else _building_type
+
+
+                _floor = col4.selectbox(label="Floor/Etage", options=['<Please select>','Basement/Keller', 'Low ground floor/Tiefparterre','Ground floor/EG','High ground floor/Hochparterre','1st floor/1. OG','2nd floor/2. OG','3rd floor/3. OG','4th floor/4. OG','5th floor/5. OG','6th floor or higher/höher als 5. OG','Attic/Dachgeschoss'], index=0)
+                _floor = selectbox_to_simplified_german(_floor)
 
 
 
+                _parking = col1.selectbox(label='Parking condition/Parksituation', options=['<Please select>','Good parking facilities/gute Parkmöglichkeiten', 'Bad parking facilities/schlechte Parkmöglichkeiten', 'Resident parking/Bewohnerpark', 'Own parking/eigener Parkplatz', 'Underground garage/Tiefgaragenstellplatz'], index=0)
+                _parking = selectbox_to_simplified_german(_parking)
 
-                col4.selectbox(label="Floor/Etage", options=['<Please select>','Basement/Keller', 'Low ground floor/Tiefparterre','Ground floor/EG','High ground floor/Hochparterre','1st floor/1. OG','2nd floor/2. OG','3rd floor/3. OG','4th floor/4. OG','5th floor/5. OG','6th floor or higher/höher als 5. OG','Attic/Dachgeschoss'], index=0, key='floor')
+                _distance_public_transport = col2.select_slider(label='Walking distance to public transport/ÖPNV (minutes)', options=[str(n) for n in range(0,61)], value='0')
+                _distance_public_transport = str(_distance_public_transport) + ' Minuten zu Fuß entfernt'
 
+                _barrier_free = col3.selectbox("Barrier-free/Barrierefrei ", ['<Please select>','Suitable for wheelchair/geeignet für Rollstuhlfaher','Not suitable for wheelchair/ungeeignet für Rollstuhlfaher'], index=0)
+                _barrier_free = selectbox_to_simplified_german(_barrier_free)
 
-                col1.selectbox(label='Parking condition/Parksituation', options=['<Please select>','Good parking facilities', 'Bad parking facilities', 'Resident parking', 'Own parking', 'Underground parking'], index=0, key='parking')
-                col2.select_slider(label='Walking distance to public transport/ÖPNV (minutes)', options=[str(n) for n in range(1,61)], value='10', key='distance_public_transport')
-                col3.selectbox("Barrier-free/Barrierefrei ", ['<Please select>','Suitable for wheelchair/geeignet für Rollstuhlfaher','Not suitable for wheelchair/ungeeignet für Rollstuhlfaher'], index=0, key='barrier_free')
-                col4.selectbox("Schufa requested/erwünscht", ['<Please select>','Yes', 'No'], index=0, key='schufa_requested')
+                _schufa_needed = col4.selectbox("Schufa requested/erwünscht", ['<Please select>','Yes', 'No'], index=0)
+
 
             with st.container():
                 st.subheader("""
@@ -973,18 +1006,57 @@ with tab2:
                         WG-info
                         """)
                 col1, col2, col3 = st.columns(3)
-                col1.select_slider(label='Female flatmates/weibliche Mitbewohnerin', options=[str(n) for n in range(0,11)], value='0', key='female_flatmates')
-                col2.select_slider(label='Male flatmates/männlicher Mitbewohner', options=[str(n) for n in range(0,11)], value='0', key='male_flatmates')
-                col3.select_slider(label='Diverse flatmates/diverse Mitbewohner', options=[str(n) for n in range(0,11)], value='0', key='diverse_flatmates')
-                col1.select_slider(label='Mininum age/Mindestalter', options=[str(n) for n in range(0,100)], value='20', key='min_age_flatmates')
-                col2.select_slider(label='Maximal age/Höchstalter', options=[str(n) for n in range(0,100)], value='20', key='max_age_flatmates')
-                col3.selectbox("Smoking/Rauchen", ['<Please select>','Allowed everywhere', 'Allowed in your room', 'Allowed on the balcony', 'No smoking'], index=0, key='smoking')
+                _female_flatmates = col1.select_slider(label='Female flatmates/weibliche Mitbewohnerinnen', options=[str(n) for n in range(0,11)], value='0')
 
-                placeholder = st.empty()
-                with placeholder.container():
+                _male_flatmates = col2.select_slider(label='Male flatmates/männliche Mitbewohner', options=[str(n) for n in range(0,11)], value='0')
+
+                _diverse_flatmates = col3.select_slider(label='Diverse flatmates/diverse Mitbewohner*innen', options=[str(n) for n in range(0,11)], value='0')
+
+
+                _gender_searched_flatmate = col1.selectbox("Gender searched/gesuchtes Geschlecht", ['Gender not relevant/Geschlecht egal','Woman/Frau', 'Man/Mann', 'Diverse/Divers'], index=0)
+                _gender_searched_flatmate = selectbox_to_simplified_german(_gender_searched_flatmate)
+
+                _minAge_searched_flatmate = col2.select_slider(label='Minimal searched age/Minimales gesuchtes Alter', options=[str(n) for n in range(0,100)], value='0')
+
+                _maxAge_searched_flatmate = col3.select_slider(label='Maximal searched age/maximales gesuchtes Alter', options=[str(n) for n in range(0,100)], value='0')
+
+                if _minAge_searched_flatmate == '0' and _maxAge_searched_flatmate == '0':
+                    _gender_search = _gender_searched_flatmate
+                elif _minAge_searched_flatmate == '0' and _maxAge_searched_flatmate != '0':
+                    _gender_search = _gender_searched_flatmate + ' bis ' + str(_maxAge_searched_flatmate) + ' Jahren'
+                elif _minAge_searched_flatmate != '0' and _maxAge_searched_flatmate == '0':
+                    _gender_search = _gender_searched_flatmate + ' ab ' + str(_maxAge_searched_flatmate) + ' Jahren'
+                elif _minAge_searched_flatmate != '0' and _maxAge_searched_flatmate != '0':
+                    _gender_search = _gender_searched_flatmate + ' zwischen ' + str(_minAge_searched_flatmate) + ' und '+ str(_maxAge_searched_flatmate) + ' Jahren'
+
+
+
+                _min_age_flatmates = col1.select_slider(label='Mininum age of flatmates/Mindestalter', options=[str(n) for n in range(0,100)], value='0')
+
+                _max_age_flatmates = col2.select_slider(label='Maximal age of flatmates/Höchstalter', options=[str(n) for n in range(0,100)], value='0')
+
+                if _min_age_flatmates == '0' and _max_age_flatmates == '0':
+                    _age_range = ''
+                elif _min_age_flatmates == '0' and _max_age_flatmates != '0':
+                    _age_range = 'bis ' + str(_max_age_flatmates) + ' Jahre'
+                elif _min_age_flatmates != '0' and _max_age_flatmates == '0':
+                    _age_range = 'ab ' + str(_max_age_flatmates) + ' Jahre'
+                elif _min_age_flatmates != '0' and _max_age_flatmates != '0':
+                    _age_range = str(_min_age_flatmates) + ' bis '+ str(_max_age_flatmates) + ' Jahre'
+
+
+                _smoking = col3.selectbox("Smoking/Rauchen", ['<Please select>','Allowed everywhere/Rauchen überall erlaubt', 'Allowed in your room/Rauchen im Zimmer erlaubt', 'Allowed on the balcony/Rauchen auf dem Balkon erlaubt', 'No smoking/Rauchen nicht erwünscht'], index=0)
+                _smoking = selectbox_to_simplified_german(_smoking)
+
+
+                with st.container():
                     col1, col2 = st.columns(2)
-                    col1.multiselect(label='WG types/WG-Arten', options=['Studenten-WG','Berufstätigen-WG','Zweck-WG','keine Zweck-WG','gemischte WG','Frauen-WG','Männer-WG','WG mit Kindern','Plus-WG','Business-WG','Verbindung','Mehrgenerationen','Wohnheim','LGBTQIA+','Azubi-WG','Vegetarisch/Vegan','Senioren-WG','Wohnen für Hilfe','Alleinerziehende','inklusive WG','Internationals welcome','funktionale WG','WG-Neugründung'], default=None, key='wg_type')
-                    col2.multiselect(label='Languages/Sprachen', options=['German/Deutsch', 'English/Englisch','Spanish/Spanisch', 'Italian/Italienisch', 'French/Französisch', 'Turkish/Türkisch', 'Albanian/Albanisch', 'Arabic/Arabisch','Bengali', 'Bosnian/Bosnisch','Chinese/Chinesisch', 'Finish/Finnisch','Greek/Griechisch', 'Hindi','Danish/Dänisch', 'Japansese/Japanisch','Croatian/Kroatisch', 'Dutch/Niederländisch','Norwegian/Norwegisch', 'Polish/Polnisch','Portuguese/Portugiesisch', 'Romenian/Rumänisch','Russian/Russisch','Swedish/Schwedisch', 'Serbian/Serbisch','Slovenian/Slowenisch','Czech/Tschechisch', 'Hungarian/Ungarisch','Sign language/Gebärdensprache'], default=None, key='languages')
+                    _wg_type = col1.multiselect(label='WG types/WG-Arten', options=['Studenten-WG','Berufstätigen-WG','Zweck-WG','keine Zweck-WG','gemischte WG','Frauen-WG','Männer-WG','WG mit Kindern','Plus-WG','Business-WG','Verbindung','Mehrgenerationen','Wohnheim','LGBTQIA+','Azubi-WG','Vegetarisch/Vegan','Senioren-WG','Wohnen für Hilfe','Alleinerziehende','inklusive WG','Internationals welcome','funktionale WG','WG-Neugründung'], default=None)
+                    _wg_type = [item.split('/')[1] for item in _wg_type]
+
+                    _languages = col2.multiselect(label='Languages/Sprachen', options=['German/Deutsch', 'English/Englisch','Spanish/Spanisch', 'Italian/Italienisch', 'French/Französisch', 'Turkish/Türkisch', 'Albanian/Albanisch', 'Arabic/Arabisch','Bengali', 'Bosnian/Bosnisch','Chinese/Chinesisch', 'Finish/Finnisch','Greek/Griechisch', 'Hindi','Danish/Dänisch', 'Japansese/Japanisch','Croatian/Kroatisch', 'Dutch/Niederländisch','Norwegian/Norwegisch', 'Polish/Polnisch','Portuguese/Portugiesisch', 'Romenian/Rumänisch','Russian/Russisch','Swedish/Schwedisch', 'Serbian/Serbisch','Slovenian/Slowenisch','Czech/Tschechisch', 'Hungarian/Ungarisch','Sign language/Gebärdensprache'], default=None)
+                    _languages = ", ".join([item.split('/')[1] for item in _languages])
+
 
             with st.container():
                 st.subheader("""
@@ -992,11 +1064,27 @@ with tab2:
                         Energy and power
                         """)
                 col1, col2, col3 = st.columns(3)
-                col1.selectbox(label='Certification type/Energieausweistyp', options=['<Please select>','Requirement/Bedarfausweis','Consumption/Verbrauchausweis'], index=0, key='energy_certificate')
-                col1.selectbox(label='Heating energy source/Energieträger der Heizung', options=['<Please select>','Oil/Öl','Geothermal/Erdwärme','Solar','Wood pellets/Holzpellets','Gas','Steam district heating/Fernwärme-Dampft','Distant district heating/Fernwärme','Coal/Kohle','Light natural gas/Erdgas leicht','Heavy natural gas/Erdgas schwer','LPG/Flüssiggas','Wood/Holz','Wood chips/Holz-Hackschnitzel','Local district heating/Nahwärme','Delivery/Wärmelieferung','Eletricity/Strom'], key='heating_energy_source')
-                col2.text_input("Power/Kennwert (kW h/(m²a))", value="", key='kennwert', max_chars = 5)
-                col2.text_input(label='Building construction year/Baujahr des Gebäudes', value="", key='building_year', max_chars = 4)
-                col3.selectbox(label='Energy efficiency class/Energieeffizienzklasse', options=['<Please select>','A+','A','B','C','D','E','F','G','H'], key='energy_efficiency')
+                _energy_certificate = col1.selectbox(label='Certification type/Energieausweistyp', options=['<Please select>','Requirement/Bedarfausweis','Consumption/Verbrauchausweis'], index=0)
+                _energy_certificate = selectbox_to_simplified_german(_energy_certificate)
+
+                _heating_energy_source = col1.selectbox(label='Heating energy source/Energieträger der Heizung', options=['<Please select>','Oil/Öl','Geothermal/Erdwärme','Solar','Wood pellets/Holzpellets','Gas','Steam district heating/Fernwärme-Dampft','Distant district heating/Fernwärme','Coal/Kohle','Light natural gas/Erdgas leicht','Heavy natural gas/Erdgas schwer','LPG/Flüssiggas','Wood/Holz','Wood chips/Holz-Hackschnitzel','Local district heating/Nahwärme','Delivery/Wärmelieferung','Eletricity/Strom'])
+                _heating_energy_source = selectbox_to_simplified_german(_heating_energy_source)
+
+                _kennwert = col2.text_input("Power/Kennwert (kW h/(m²a))", value="", max_chars = 5)
+                if _kennwert != '':
+                    _kennwert = 'V: ' + str(_kennwert) +'kW h/(m²a)'
+                else:
+                    _kennwert = np.nan
+
+                _building_year = col2.text_input(label='Building construction year/Baujahr des Gebäudes', value="", max_chars = 4)
+                _energy_efficiency = col3.selectbox(label='Energy efficiency class/Energieeffizienzklasse', options=['<Please select>','A+','A','B','C','D','E','F','G','H'])
+                if _energy_efficiency != '<Please select>':
+                    _energy_efficiency = 'Energieeffizienzklasse ' + _energy_efficiency
+                else:
+                    _energy_efficiency = np.nan
+
+                _energy = ", ".join([item for item in [_energy_certificate, _kennwert, _heating_energy_source, _building_year, _energy_efficiency] if item == item])
+
 
             with st.container():
                 st.subheader("""
@@ -1004,16 +1092,35 @@ with tab2:
                         Utils
                         """)
                 col1, col2, col3 = st.columns(3)
-                col1.selectbox(label='Heating/Heizung', options=['<Please select>','Central heating/Zentralheizung','Gas heating/Gasheizung', 'Furnace heating/Ofenheizung', 'District heating/Fernwärme', 'Coal oven/Kohleofen', 'Night storage heating/Nachtspeicherofen'], index=0, key='heating')
+                _heating = col1.selectbox(label='Heating/Heizung', options=['<Please select>','Central heating/Zentralheizung','Gas heating/Gasheizung', 'Furnace heating/Ofenheizung', 'District heating/Fernwärme', 'Coal oven/Kohleofen', 'Night storage heating/Nachtspeicherofen'], index=0)
+                try:
+                    _heating = _heating.split('/')[1]
+                except IndexError:
+                    _heating = np.nan
 
 
 
-                col1.multiselect(label='Internet', options=['DSL', 'Flatrate', 'WLAN'], default=None, key='internet')
-                col1.selectbox(label='DSL-Speed', options=['<Please select>','Slower than 10 Mbit/s','Up to 10 Mbit/s','Up to 16 Mbit/s','Up to 25 Mbit/s','Up to 50 Mbit/s','Up to 100 Mbit/s','Faster than 100 Mbit/s'], index=0, key='internet_speed')
-                col2.multiselect(label='Furniture/Einrichtung', options=['<Please select>','Furnished/Möbliert', 'Partly furnished/Teilmöbliert'], key='furniture')
-                col2.multiselect(label='Floor type/Bodenbelag', options=['Floorboards/Dielen', 'Parquet/Parkett', 'Laminate/Laminat', 'Carpet/Teppich', 'Tiles/Fliesen', 'PVC', 'Underfloor heating/Fußbodenheizung'], default=None, key='floor_type')
-                col3.multiselect(label='TV', options=['Cable TV/Kabel TV', 'Satellite TV/Satellit TV'], default=None, key='tv')
-                col3.multiselect(label='Miscellaneous/Sonstiges', options=['Washing machine/Waschmaschine', 'Dishwasher/Spülmaschine', 'Terrace/Terrasse', 'Balcony/Balkon', 'Garden/Garten', 'Shared garden/Gartenmitbenutzung', 'Basement/Keller', 'Elevator/Aufzug', 'Pets allowed/Haustiere erlaubt', 'Bicycle storage/Fahrradkeller'], default=None, key='extras')
+                _internet = col1.multiselect(label='Internet', options=['DSL', 'Flatrate', 'WLAN'], default=None)
+                _internet = ', '.join([item for item in _internet])
+
+                _internet_speed = col1.selectbox(label='DSL-Speed', options=['<Please select>','7-10 Mbit/s','11-16 Mbit/s','17-25 Mbit/s','26-50 Mbit/s','50-100 Mbit/s','Faster than/schneller als 100 Mbit/s'], index=0)
+                _internet_speed = 'schneller als 100 Mbit/s' if _internet_speed == 'Faster than/schneller als 100 Mbit/s' else '' if _internet_speed == '<Please select>' else _internet_speed
+
+                if _internet_speed != '':
+                    _internet = _internet + ' ' + _internet_speed
+
+                _furniture = col2.multiselect(label='Furniture/Einrichtung', options=['<Please select>','Furnished/Möbliert', 'Partly furnished/Teilmöbliert'])
+                _furniture = ", ".join([item.split('/')[1] for item in _furniture])
+
+                _floor_type = col2.multiselect(label='Floor type/Bodenbelag', options=['Floorboards/Dielen', 'Parquet/Parkett', 'Laminate/Laminat', 'Carpet/Teppich', 'Tiles/Fliesen', 'PVC', 'Underfloor heating/Fußbodenheizung'], default=None)
+                _floor_type = ", ".join([item.split('/')[1] for item in _floor_type])
+
+                _tv = col3.multiselect(label='TV', options=['Cable TV/Kabel TV', 'Satellite TV/Satellit TV'], default=None)
+                _tv = [item.split('/')[1] for item in _tv]
+                _tv = _tv if len(_tv) > 0 else np.nan
+
+                _extras = col3.multiselect(label='Miscellaneous/Sonstiges', options=['Washing machine/Waschmaschine', 'Dishwasher/Spülmaschine', 'Terrace/Terrasse', 'Balcony/Balkon', 'Garden/Garten', 'Shared garden/Gartenmitbenutzung', 'Basement/Keller', 'Elevator/Aufzug', 'Pets allowed/Haustiere erlaubt', 'Bicycle storage/Fahrradkeller'], default=None)
+                _extras = ", ".join([item.split('/')[1] for item in _extras])
 
             "---"
             submitted_form = st.form_submit_button("Submit form")
@@ -1032,98 +1139,347 @@ with tab2:
         # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
         ads_df = get_data_from_db().copy()
 
+        ad_df_processed = None
 
         #### Checking inputted info is correct format
-        if str(st.session_state.city_own) == "<Please select>":
-            st.markdown("""
-            Selecting a city is mandatory for analysis.
-            """, unsafe_allow_html=True)
-        elif str(st.session_state.address) == "Example Str. 15":
-            st.markdown("""
-            An address is mandatory for analysis.
-            """, unsafe_allow_html=True)
-        elif str(st.session_state.zip_code) == "12345":
-            st.markdown("""
-            The zip code is mandatory for analysis.
-            """, unsafe_allow_html=True)
-        elif str(st.session_state.price_euros) == 0:
-            st.markdown("""
-            The warm rent is mandatory for analysis.
-            """, unsafe_allow_html=True)
-        # elif ~str(st.session_state.zip_code).isnumeric():
-        #     st.markdown(f"""
-        #     The zip code provided is invalid: {st.session_state.zip_code}.
-        #     Zip code must containg only numbers.
-        #     """, unsafe_allow_html=True)
+        if _city == "<Please select>":
+            st.error(f"""
+                        Selecting a city is mandatory for analysis.
+                        """, icon="🚨")
+        elif _street_number == "Str 15":
+            st.error(f"""
+                        An address is mandatory for analysis.
+                        """, icon="🚨")
+        elif _zip_code == "12345":
+            st.error(f"""
+                        The zip code is mandatory for analysis.
+                        """, icon="🚨")
+        elif not _zip_code.isnumeric():
+            st.error(f"""
+                        Zip code must containg only numbers.
+                        """, icon="🚨")
+        elif _price_euros == 0:
+            st.error(f"""
+                        The warm rent price is mandatory for analysis.
+                        """, icon="🚨")
+        elif _price_euros > 2000 or _price_euros < 50:
+            st.error(f"""
+                        The warm rent price is too extreme.
+                        """, icon="🚨")
+        elif _size_sqm > 60 or _size_sqm < 5:
+            st.error(f"""
+                        The room size is too extreme.
+                        """, icon="🚨")
+        elif _size_sqm == 0:
+            st.error(f"""
+                        The room size is mandatory for analysis.
+                        """, icon="🚨")
 
         else:
-            full_address = str(st.session_state.address) + ', ' + str(st.session_state.zip_code) + ', ' + str(st.session_state.city_own)
+            full_address = _street_number + ', ' + _zip_code + ', ' + _city
 
-            lat, lon = geocoding_address(full_address)
+            with st.spinner(f'Processing address.'):
+                lat, lon = geocoding_address(full_address)
 
-            if lat == lat and lon != lon: # Check if lat and lon are not nan
-                detail_dict = {
-                'id': [''],
-                'url': [''],
+
+            if lat == lat and lon == lon: # Check if lat and lon are not nan
+                st.success('Address processed successfully!', icon="✅")
+
+                info_flat = pd.DataFrame.from_dict({
+                'id': ['test'],
+                'url': ['test'],
                 'type_offer': ['WG'],
                 'landlord_type': ['Private'],
-                'title': [''],
-                'price_euros': [int(st.session_state.price_euros)],
-                'size_sqm': [int(st.session_state.size_sqm)],
+                'title': ['test'],
+                'price_euros': [int(_price_euros)],
+                'size_sqm': [float(_size_sqm)],
                 'available_rooms': [1],
-                'WG_size': [int(st.session_state.total_flat_size)],
+                'WG_size': [1+int(_male_flatmates)+int(_female_flatmates)+int(_diverse_flatmates)],
                 'available_spots_wg': [1],
-                'male_flatmates': [int(st.session_state.male_flatmates)],
-                'female_flatmates': [int(st.session_state.female_flatmates)],
-                'diverse_flatmates': [int(st.session_state.diverse_flatmates)],
+                'male_flatmates': [int(_male_flatmates)],
+                'female_flatmates': [int(_female_flatmates)],
+                'diverse_flatmates': [int(_diverse_flatmates)],
                 'published_on': [str(time.strftime(f"%d.%m.%Y", time.localtime()))],
                 'published_at': [int(time.strftime(f"%H", time.localtime()))],
-                'address': [full_address],
-                'city': [str(st.session_state.city_own)],
+                'address': [str(full_address)],
+                'city': [str(_city)],
                 'crawler': ['WG-Gesucht'],
                 'latitude': [float(lat)],
                 'longitude': [float(lon)],
                 'available from': [str(time.strftime(f"%d.%m.%Y", time.localtime()))],
-                'available to': [np.nan]
-                    }
+                'available to': [np.nan],
+                'details_searched': [True],
+                'cold_rent_euros': [int(_cold_rent_euros) if _cold_rent_euros != 0 else np.nan],
+                'mandatory_costs_euros': [int(_mandatory_costs_euros) if _mandatory_costs_euros != 0 else np.nan],
+                'extra_costs_euros': [int(_extra_costs_euros) if _extra_costs_euros != 0 else np.nan],
+                'transfer_costs_euros': [int(_transfer_costs_euros) if _transfer_costs_euros != 0 else np.nan],
+                'deposit': [int(_deposit) if _deposit != 0 else np.nan],
+                'zip_code': [int(_zip_code)],
+                'home_total_size': [int(_home_total_size) if _home_total_size != 0 else np.nan],
+                'smoking': [str(_smoking) if _smoking == _smoking else np.nan],
+                'wg_type': [str(_wg_type) if len(_wg_type) > 0 else np.nan],
+                'languages': [str(_languages) if len(_languages) > 0 else np.nan],
+                'age_range': [str(_age_range) if _age_range != '' else np.nan],
+                'gender_search': [str(_gender_search)],
+                'energy': [str(_energy) if _energy != 'V: kW h/(m²a), ' else np.nan],
+                'wg_possible': [np.nan],
+                'building_type': [str(_building_type) if _building_type != '' else np.nan],
+                'building_floor': [str(_floor) if _floor == _floor else np.nan],
+                'furniture': [str(_furniture) if len(_furniture) > 0 else np.nan],
+                'kitchen': [np.nan],
+                'shower_type': [np.nan],
+                'TV': [str(_tv) if _tv == _tv else np.nan],
+                'floor_type': [str(_floor_type) if len(_floor_type) > 0 else np.nan],
+                'heating': [str(_heating) if _heating == _heating else np.nan],
+                'public_transport_distance': [str(_distance_public_transport) if _distance_public_transport != '0 Minuten zu Fuß entfernt' else np.nan],
+                'internet': [str(_internet) if str(_internet) != '' else np.nan],
+                'parking': [str(_parking) if _parking == _parking else np.nan],
+                'extras': [str(_extras) if len(_extras) > 0 else np.nan],
+                'Schufa_needed': [True if _schufa_needed == 'Yes' else np.nan]
+                    })
 
 
-                # building_type
-                # floor
-                # parking
-                # distance_public_transport
-                # barrier_free
-                # schufa_requested
-                # min_age_flatmates
-                # max_age_flatmates
-                # smoking
-                # wg_type
-                # languages
-                # energy_certificate
-                # energy_source
-                # building_year
-                # energy_efficiency
-                # heating
-                # internet
-                # furniture
-                # floor_type
-                # extras
-
-
-
-
-                st.markdown("""
-                        ### Page under construction.
-                        """, unsafe_allow_html=True)
-
-
-
-
+                info_flat
+                with st.spinner(f'Obtaining WG room info.'):
+                    ad_df_processed = process_ads_tables(input_ads_df = info_flat, save_processed = False, df_feats_tag = 'city')
+                    st.success('WG room info obtained!', icon="✅")
 
             else:
-                st.markdown(f"""
-                The provided address is invalid: {full_address}
-                """, unsafe_allow_html=True)
+                st.error(f"""
+                        The provided address is invalid: {full_address}
+                        """, icon="🚨")
+
+
+        if ad_df_processed is not None:
+            with st.spinner(f'Analysing information. This could take a minute.'):
+
+
+        #### Collect files needed for analysis ####
+                ### Obtain main ads table ###
+                # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
+                ads_df = get_data_from_db().copy()
+                ### Filter data for analysis ###
+                ## WGs only
+                ads_df = ads_df[ads_df['type_offer_simple'] == 'WG']
+
+                ## Remove ad of interest from database
+                ads_df = ads_df[ads_df['id'] != list(ad_df_processed['id'])[0]]
+
+
+                ## Filter for past 3 months only
+                # Format dates properly
+                ads_df['published_on'] = pd.to_datetime(ads_df['published_on'], format = "%Y-%m-%d")
+                date_three_months_ago = datetime.date.today() + relativedelta(months=-3)
+                ads_df_3_months = ads_df[ads_df['published_on'] >= pd.to_datetime(date_three_months_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
+
+        #### Analysis results ####
+                placeholder = st.empty()
+                with placeholder.container():
+                    st.subheader(f"""
+                            This is how your WG compares to other WGs published in the past three months:
+                            """)
+                    col1, col2, col3, col4 = st.columns(4)
+
+            #### Number ads ####
+                    ## Same city
+                    ads_df_city = ads_df_3_months[ads_df_3_months['city'] == list(ad_df_processed['city'])[0]]
+                    n_posts_city = len(ads_df_city)
+                    n_days_post_city = round(90/n_posts_city,1)
+                    n_hours_post_city = round((24*90)/n_posts_city,1)
+
+                    ## Same zip
+                    ads_df_zip_code = ads_df_3_months[ads_df_3_months['zip_code'] == list(ad_df_processed['zip_code'])[0]]
+                    n_posts_zipcode = len(ads_df_zip_code)
+                    n_days_post_zipcode = round(90/n_posts_zipcode,1)
+                    n_hours_post_zipcode = round((24*90)/n_posts_zipcode,1)
+
+                    col1.markdown(f"""
+                            <font size= "4">**Number of ads posted**</font>
+                            """, unsafe_allow_html=True)
+
+                    col1.markdown(f"""
+                            <font size= "4">On average, <span style="color:tomato">**{n_hours_post_city if n_days_post_city <= 1 else n_days_post_city}**</span> WG room ads were posted in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> every {'hour' if n_days_post_city <= 1 else 'day'}.
+
+                            <span style="color:tomato">**{n_hours_post_zipcode if n_days_post_zipcode <= 1 else n_days_post_zipcode}**</span> WG room ads with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span> were posted every {'hour' if n_days_post_zipcode <= 1 else 'day'}.</font>
+                            """, unsafe_allow_html=True)
+
+            #### Size room ####
+                    ## Smaller size
+                    ads_df_smaller = ads_df_3_months[ads_df_3_months['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+                    percent_smaller = round(100*(len(ads_df_smaller)/len(ads_df_3_months)),1)
+
+                    ## Smaller zip_code
+                    ads_df_smaller_zipcode = ads_df_zip_code[ads_df_zip_code['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+                    percent_smaller_zipcode = round(100*(len(ads_df_smaller_zipcode)/len(ads_df_zip_code)),1)
+
+                    col2.markdown(f"""
+                            <font size= "4">**Size of the room**</font>
+                            """, unsafe_allow_html=True)
+
+                    col2.markdown(f"""
+                            <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG room is bigger than <span style="color:tomato">**{percent_smaller} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_smaller_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            """, unsafe_allow_html=True)
+
+            #### Price ####
+                    ## Cheaper city
+                    ads_df_cheaper = ads_df_3_months[ads_df_3_months['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+                    percent_cheaper = round(100*(len(ads_df_cheaper)/len(ads_df_3_months)),1)
+
+                    ## Cheaper zip_code
+                    ads_df_cheaper_zipcode = ads_df_zip_code[ads_df_zip_code['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+                    percent_cheaper_zipcode = round(100*(len(ads_df_cheaper_zipcode)/len(ads_df_zip_code)),1)
+
+                    col3.markdown(f"""
+                            <font size= "4">**WG price**</font>
+                            """, unsafe_allow_html=True)
+
+                    col3.markdown(f"""
+                            <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG room is more expensive than <span style="color:tomato">**{percent_cheaper} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_cheaper_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            """, unsafe_allow_html=True)
+
+            #### Factors influencing price ####
+                    # Size
+                    wg_is_large = True if percent_smaller_zipcode > 50 else False
+
+                    # Location
+                    ads_df_not_zip_code = ads_df_city[ads_df_city['zip_code'] != list(ad_df_processed['zip_code'])[0]]
+                    ads_df_not_zip_code = ads_df_not_zip_code[ads_df_not_zip_code['zip_code'].notna()]
+                    mean_zip_code = ads_df_zip_code['price_euros'].mean()
+                    mean_not_zip_code = ads_df_not_zip_code['price_euros'].mean()
+
+                    import scipy.stats as stats
+                    #perform two sample t-test with equal variances
+                    p_value = stats.ttest_ind(a=ads_df_zip_code['price_euros'], b=ads_df_not_zip_code['price_euros'], equal_var = True, nan_policy = 'omit', random_state = 42)
+                    if p_value[1] <=0.05:
+                        if mean_zip_code > mean_not_zip_code:
+                            zip_is_more = 'pricier'
+                        else:
+                            zip_is_more = 'cheaper'
+                    else:
+                        zip_is_more = 'similar'
+
+
+
+                    # schufa_needed
+                    schufa_needed = str(list(ad_df_processed['schufa_needed'])[0]) == '1'
+
+                    # commercial_landlord
+                    commercial_landlord = str(list(ad_df_processed['commercial_landlord'])[0]) == '1'
+
+                    # capacity
+                    capacity = int(list(ad_df_processed['capacity'])[0])
+
+                    # days_available
+                    days_available = int(list(ad_df_processed['days_available'])[0])
+
+                    # wg_type_studenten
+                    wg_type_studenten = str(list(ad_df_processed['wg_type_studenten'])[0]) == '1'
+
+                    # wg_type_business
+                    wg_type_business = str(list(ad_df_processed['wg_type_business'])[0]) == '1'
+
+                    # building_type
+                    building_type = str(list(ad_df_processed['building_type'])[0])
+
+
+                    col4.markdown(f"""
+                            <font size= "4">**Possible factors affecting price**</font>
+                            """, unsafe_allow_html=True)
+
+
+                    def generate_text_possible_price_factors():
+                        prompts = ['\n','- Room is large' if percent_smaller_zipcode >= 70 else '- Room is small' if percent_smaller_zipcode <= 30 else '' +\
+                            '- WG in pricier neighborhood' if zip_is_more == 'pricier' else '- WG in cheaper neighborhood' if zip_is_more == 'cheaper' else '',
+
+                            '- WGs in ' + building_type + ' building type tend to be pricier' if building_type == 'Neubau' or building_type == 'Hochhaus' else '- WGs in ' + building_type + ' building type tend to be cheaper' if building_type == 'Einfamilienhaus' else '',
+
+                            '- Students WG type tend to be cheaper' if wg_type_studenten else '',
+
+                            '- Business WG type tend to be pricier' if wg_type_business else '',
+
+                            '- WGs that require Schufa tend to be pricier' if schufa_needed else '',
+
+                            '- WGs with companies as landlord tend to be pricier' if commercial_landlord else '',
+
+                            '- WGs with capacity for ' + str(capacity) + ' people tend to be pricier' if capacity >= 5 else '- WGs for only 2 people tend to be cheaper' if capacity == 2 else '',
+
+                            '- Short-term rental WGs (<30 days) tend to be cheaper' if days_available <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if days_available > 540 else '']
+
+                        return '\n'.join(text for text in prompts if text != '')
+
+                    col4.markdown(f"""
+                                    <font size= "4">{generate_text_possible_price_factors()}</font>
+                                    """, unsafe_allow_html=True)
+
+
+            #### Price prediction ####
+                '\n'
+                '\n'
+                placeholder_prediction = st.empty()
+                with placeholder_prediction.container():
+                    st.markdown(f"""
+                            <font size= "4">**Rent price fairness**</font>
+                            """, unsafe_allow_html=True)
+
+                    try:
+                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
+                    except ValueError: # cold_rent_euros is nan
+                        st.markdown(f"""
+                            The ad did not include the cold rent price for this room. Estimating cold rent price from warm rent.
+                            """, unsafe_allow_html=True)
+
+                        import statsmodels.api as sm
+
+
+                        # create predictive model for cold rent from warm rent
+                        wg_df_foo = ads_df_3_months[ads_df_3_months['cold_rent_euros'].notna()]
+                        wg_df_foo = wg_df_foo[wg_df_foo['price_euros'].notna()]
+                        model_cold_from_warm = sm.OLS(wg_df_foo.cold_rent_euros, wg_df_foo.price_euros).fit()
+
+                        # # Add cold rent predictions only if cold_rent_euros is nan
+                        ad_df_processed['cold_rent_euros'] = int(model_cold_from_warm.predict(ad_df_processed['price_euros'])[0])
+
+                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
+
+
+                    ### Load model for prediction locally ###
+                    # I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
+                    trained_model = get_latest_model_from_db()
+
+
+                    # Predict expected cold_rent_euros
+                    pred_price_sqm = float(trained_model.predict(ad_df_processed))
+                    cold_rent_pred = int(float(pred_price_sqm*ad_df_processed['size_sqm']))
+
+                    # Calculate extra costs
+                    extra_costs_total = int(list(ad_df_processed['price_euros'])[0]) - int(list(ad_df_processed['cold_rent_euros'])[0])
+
+                    warm_rent_pred =  int(cold_rent_pred + extra_costs_total)
+
+
+                    ## Ad evaluation
+                    ad_evaluation = 'over' if int(ad_df_processed['price_euros']) > warm_rent_pred*1.2 else 'under' if int(ad_df_processed['price_euros']) < warm_rent_pred*1.2 else 'fair'
+
+
+                    if ad_evaluation == 'over':
+                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
+                    elif ad_evaluation == 'fair':
+                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
+                    elif ad_evaluation == 'under':
+                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
+
+                    # Display predictions
+                    st.markdown(f"""
+                                The predicted warm rent for this offer is: <span style="color:tomato">**{warm_rent_pred} €**</span>. This prediction is composed of the predicted cold rent ({cold_rent_pred} €), plus invariant mandatory and extra costs taken from the ad page. In the ad page, this WG room is priced at <span style="color:tomato">**{int(ad_df_processed['price_euros'])} €**</span> (warm rent). {ad_evaluation}.
+                                """, unsafe_allow_html=True)
+
+                    st.markdown(f"""
+                            <font size= "2">*There are two types of rent prices: cold and warm rent. Cold rent is the basic price of the rent, while warm rent usually includes the cold rent, water, heating and house maintenance costs. Warm rent may also include internet and TV/radio/internet taxes and other invariant costs.</font>
+                            """, unsafe_allow_html=True)
+
+
+
+
 
 
 

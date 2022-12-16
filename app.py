@@ -1238,8 +1238,6 @@ with tab2:
                 'Schufa_needed': [True if _schufa_needed == 'Yes' else np.nan]
                     })
 
-
-                info_flat
                 with st.spinner(f'Obtaining WG room info.'):
                     ad_df_processed = process_ads_tables(input_ads_df = info_flat, save_processed = False, df_feats_tag = 'city')
                     st.success('WG room info obtained!', icon="✅")

@@ -971,16 +971,16 @@ with tab1:
                                 for _square in [12000,8000,4000,2000,1000,500]:
                                     if len(ads_df_recommendation) > 10 or len(ads_df_recommendation)<3:
 
-                                        lat_max = lat_ad + m_to_coord(_square, latitude=lat_ad, direction='north')
+                                        lat_max = lat_ad + meters_to_coord(_square, latitude=lat_ad, direction='north')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] <=lat_max]
 
-                                        lat_min = lat_ad - m_to_coord(_square, latitude=lat_ad, direction='south')
+                                        lat_min = lat_ad - meters_to_coord(_square, latitude=lat_ad, direction='south')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] >=lat_min]
 
-                                        lon_max = lon_ad + m_to_coord(_square, latitude=lat_ad, direction='west')
+                                        lon_max = lon_ad + meters_to_coord(_square, latitude=lat_ad, direction='west')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] <=lon_max]
 
-                                        lon_min = lon_ad - m_to_coord(_square, latitude=lat_ad, direction='east')
+                                        lon_min = lon_ad - meters_to_coord(_square, latitude=lat_ad, direction='east')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] >=lon_min]
 
 
@@ -1489,16 +1489,16 @@ with tab2:
                                 for _square in [12000,8000,4000,2000,1000,500]:
                                     if len(ads_df_recommendation) > 10 or len(ads_df_recommendation)<3:
 
-                                        lat_max = lat_ad + m_to_coord(_square, latitude=lat_ad, direction='north')
+                                        lat_max = lat_ad + meters_to_coord(_square, latitude=lat_ad, direction='north')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] <=lat_max]
 
-                                        lat_min = lat_ad - m_to_coord(_square, latitude=lat_ad, direction='south')
+                                        lat_min = lat_ad - meters_to_coord(_square, latitude=lat_ad, direction='south')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] >=lat_min]
 
-                                        lon_max = lon_ad + m_to_coord(_square, latitude=lat_ad, direction='west')
+                                        lon_max = lon_ad + meters_to_coord(_square, latitude=lat_ad, direction='west')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] <=lon_max]
 
-                                        lon_min = lon_ad - m_to_coord(_square, latitude=lat_ad, direction='east')
+                                        lon_min = lon_ad - meters_to_coord(_square, latitude=lat_ad, direction='east')
                                         ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] >=lon_min]
 
 

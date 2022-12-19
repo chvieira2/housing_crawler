@@ -1032,7 +1032,7 @@ def obtain_latest_model():
     pkl_files = sorted([file_name.split('/')[-1] for file_name in pkl_files])
     return pickle.load(open(f'{directory}/{pkl_files[-1]}','rb'))
 
-def m_to_coord(m, latitude=52.52, direction='east'):
+def meters_to_coord(m, latitude=52.52, direction='east'):
     """
         Takes an offset in meters in a given direction (north, south, east and west) at a given latitude and returns the corresponding value in lat (north or south) or lon (east or west) degrees
         Uses the French approximation.

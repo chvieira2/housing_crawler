@@ -32,7 +32,7 @@ import scipy.stats as stats
 
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.string_utils import standardize_characters
-from housing_crawler.utils import crawl_ind_ad_page2, get_data, obtain_latest_model, m_to_coord
+from housing_crawler.utils import crawl_ind_ad_page2, get_data, obtain_latest_model, meters_to_coord
 from housing_crawler.ads_table_processing import process_ads_tables
 from housing_crawler.geocoding_addresses import geocoding_address
 

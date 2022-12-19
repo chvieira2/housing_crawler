@@ -26,10 +26,13 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
+import statsmodels.api as sm
+import scipy.stats as stats
+
 
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.string_utils import standardize_characters
-from housing_crawler.utils import crawl_ind_ad_page2, get_data, obtain_latest_model
+from housing_crawler.utils import crawl_ind_ad_page2, get_data, obtain_latest_model, m_to_coord
 from housing_crawler.ads_table_processing import process_ads_tables
 from housing_crawler.geocoding_addresses import geocoding_address
 
@@ -102,7 +105,15 @@ def get_data_from_db(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
     Method to get data from local environment and return a unified dataframe
 
     """
-    return get_data(file_name_tag=file_name_tag, local_file_path=local_file_path)
+    ads_db = get_data(file_name_tag=file_name_tag, local_file_path=local_file_path)
+
+    ## Correct date format
+    ads_db['published_on'] = pd.to_datetime(ads_db['published_on'], format = "%Y-%m-%d")
+
+    ## WGs only
+    ads_db = ads_db[ads_db['type_offer_simple'] == 'WG']
+
+    return ads_db
 
 @st.cache
 def get_latest_model_from_db():
@@ -599,6 +610,161 @@ def selectbox_to_simplified_german(feature : str):
             feature_list =  feature[0]
             return feature_list if feature_list != '' else np.nan
 
+@st.cache(allow_output_mutation=True)
+def url_to_df(df: pd.DataFrame):
+    """
+    Receives a URL, analyses it with crawl_ind_ad_page2 and processes it with process_ads_tables.
+    Returns the dataframe ready for prediction with the model.
+    """
+    ## Process ad_df for analysis
+    return process_ads_tables(input_ads_df = crawl_ind_ad_page2(url), save_processed = False, df_feats_tag = 'city')
+
+def pred_from_df(ad_df):
+    """
+    This function receives a processed dataframe from url_to_df() and returns the predicted cold rent price.
+    """
+    ### Load model for prediction locally ###
+    # I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
+    trained_model = get_latest_model_from_db()
+
+
+    # Predict expected cold_rent_euros
+    pred_price_sqm = float(trained_model.predict(ad_df))
+    return int(float(pred_price_sqm*ad_df['size_sqm']))
+
+@st.cache(allow_output_mutation=True)
+def analyse_df_ad(ads_db: pd.DataFrame, ad_df: pd.DataFrame):
+    """
+    This function receives a dataframe produced by url_to_df and the database of all ads for analysis.
+    Function returns a dictionary analysis_dict containing all analysis values
+    """
+    analysis_dict={}
+
+    ## Remove ad of interest from database
+    ads_db = ads_db[ads_db['id'] != list(ad_df['id'])[0]]
+
+    ## Filter for past 3 months only
+    date_three_months_ago = datetime.date.today() + relativedelta(months=-3)
+    ads_df_3_months = ads_db[ads_db['published_on'] >= pd.to_datetime(date_three_months_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
+
+
+
+    #### Number ads ####
+    ## Same city
+    ads_df_city = ads_df_3_months[ads_df_3_months['city'] == list(ad_df_processed['city'])[0]]
+    n_posts_city = len(ads_df_city)
+    analysis_dict['n_days_post_city'] = round(90/n_posts_city,1)
+    analysis_dict['n_hours_post_city'] = round((24*90)/n_posts_city,1)
+
+    ## Same zip
+    ads_df_zip_code = ads_df_3_months[ads_df_3_months['zip_code'] == list(ad_df_processed['zip_code'])[0]]
+    n_posts_zipcode = len(ads_df_zip_code)
+    analysis_dict['n_days_post_zipcode'] = round(90/n_posts_zipcode,1)
+    analysis_dict['n_hours_post_zipcode'] = round((24*90)/n_posts_zipcode,1)
+
+
+
+    #### Size room ####
+    ## Smaller size
+    ads_df_smaller = ads_df_3_months[ads_df_3_months['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+    analysis_dict['percent_smaller'] = round(100*(len(ads_df_smaller)/len(ads_df_3_months)),1)
+
+    ## Smaller zip_code
+    ads_df_smaller_zipcode = ads_df_zip_code[ads_df_zip_code['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
+    analysis_dict['percent_smaller_zipcode'] = round(100*(len(ads_df_smaller_zipcode)/len(ads_df_zip_code)),1)
+
+
+
+    #### Price ####
+    ## Cheaper city
+    ads_df_cheaper = ads_df_3_months[ads_df_3_months['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+    analysis_dict['percent_cheaper'] = round(100*(len(ads_df_cheaper)/len(ads_df_3_months)),1)
+
+    ## Cheaper zip_code
+    ads_df_cheaper_zipcode = ads_df_zip_code[ads_df_zip_code['price_euros'] < list(ad_df_processed['price_euros'])[0]]
+    analysis_dict['percent_cheaper_zipcode'] = round(100*(len(ads_df_cheaper_zipcode)/len(ads_df_zip_code)),1)
+
+
+
+    #### Factors influencing price ####
+    # Size
+    analysis_dict['wg_is_large'] = True if analysis_dict['percent_smaller_zipcode'] > 50 else False
+
+    # Location
+    ads_df_not_zip_code = ads_df_city[ads_df_city['zip_code'] != list(ad_df_processed['zip_code'])[0]]
+    ads_df_not_zip_code = ads_df_not_zip_code[ads_df_not_zip_code['zip_code'].notna()]
+    mean_zip_code = ads_df_zip_code['price_euros'].mean()
+    mean_not_zip_code = ads_df_not_zip_code['price_euros'].mean()
+
+    #perform two sample t-test with equal variances
+    p_value = stats.ttest_ind(a=ads_df_zip_code['price_euros'], b=ads_df_not_zip_code['price_euros'], equal_var = True, nan_policy = 'omit', random_state = 42)
+    if p_value[1] <=0.05:
+        if mean_zip_code > mean_not_zip_code:
+            analysis_dict['zip_is_more'] = 'pricier'
+        else:
+            analysis_dict['zip_is_more'] = 'cheaper'
+    else:
+        analysis_dict['zip_is_more'] = 'similar'
+
+
+
+    # schufa_needed
+    analysis_dict['schufa_needed'] = str(list(ad_df_processed['schufa_needed'])[0]) == '1'
+
+    # commercial_landlord
+    analysis_dict['commercial_landlord'] = str(list(ad_df_processed['commercial_landlord'])[0]) == '1'
+
+    # capacity
+    analysis_dict['capacity'] = int(list(ad_df_processed['capacity'])[0])
+
+    # days_available
+    analysis_dict['days_available'] = int(list(ad_df_processed['days_available'])[0])
+
+    # wg_type_studenten
+    analysis_dict['wg_type_studenten'] = str(list(ad_df_processed['wg_type_studenten'])[0]) == '1'
+
+    # wg_type_business
+    analysis_dict['wg_type_business'] = str(list(ad_df_processed['wg_type_business'])[0]) == '1'
+
+    # building_type
+    analysis_dict['building_type'] = str(list(ad_df_processed['building_type'])[0])
+
+
+
+
+    #### Price prediction ####
+    try:
+        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
+
+    except ValueError: # cold_rent_euros is nan
+        # create predictive model for cold rent from warm rent
+        wg_df_foo = ads_df_3_months[ads_df_3_months['cold_rent_euros'].notna()]
+        wg_df_foo = wg_df_foo[wg_df_foo['price_euros'].notna()]
+        model_cold_from_warm = sm.OLS(wg_df_foo.cold_rent_euros, wg_df_foo.price_euros).fit()
+
+        # # Add cold rent predictions only if cold_rent_euros is nan
+        ad_df_processed['cold_rent_euros'] = int(model_cold_from_warm.predict(ad_df_processed['price_euros'])[0])
+
+        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
+
+
+    # Predict expected cold_rent_euros
+    try:
+        analysis_dict['cold_rent_pred'] = pred_from_df(ad_df = ad_df_processed)
+
+        # Calculate extra costs
+        extra_costs_total = int(list(ad_df_processed['price_euros'])[0]) - int(cold_rent)
+
+        analysis_dict['warm_rent_pred'] =  int(analysis_dict['cold_rent_pred'] + extra_costs_total)
+
+
+        ## Ad evaluation
+        analysis_dict['ad_evaluation'] = 'Overpriced' if int(ad_df_processed['price_euros']) > analysis_dict['warm_rent_pred']*1.2 else 'Underpriced' if int(ad_df_processed['price_euros']) < analysis_dict['warm_rent_pred']*1.2 else 'Fairly priced'
+    except:
+        analysis_dict['ad_evaluation'] = None
+
+    return analysis_dict
+
 
 # ---------------------- PAGE START ----------------------
 st.markdown("""
@@ -659,13 +825,9 @@ with tab1:
         if url_ok:
             with st.spinner(f'Analysing {url}. This could take a minute.'):
                 ## Process url to obtain table for prediction
-                ad_df = crawl_ind_ad_page2(url)
-
                 ad_df_processed = None
                 try:
-                    ## Process ad_df for analysis
-                    ad_df_processed = process_ads_tables(input_ads_df = ad_df, save_processed = False, df_feats_tag = 'city')
-                    ad_df_processed
+                    ad_df_processed = url_to_df(url)
                     st.success('Analysis was successful!', icon="✅")
 
                 except Exception as err:
@@ -679,7 +841,7 @@ with tab1:
 
                                 Please get in contact if you think none of these reasons apply in your case.
                                 """, icon="🚨")
-                    # print(f"Unexpected {err=}, {type(err)=}")
+                    print(f"Unexpected {err=}, {type(err)=}")
                     # raise
 
 
@@ -690,152 +852,70 @@ with tab1:
                 ### Obtain main ads table ###
                 # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
                 ads_df = get_data_from_db().copy()
+
                 ### Filter data for analysis ###
-                ## WGs only
-                ads_df = ads_df[ads_df['type_offer_simple'] == 'WG']
+                ad_df_analysis_dict = analyse_df_ad(ads_db = ads_df, ad_df = ad_df_processed)
 
-                ## Remove ad of interest from database
-                ads_df = ads_df[ads_df['id'] != list(ad_df_processed['id'])[0]]
-
-
-                ## Filter for past 3 months only
-                # Format dates properly
-                ads_df['published_on'] = pd.to_datetime(ads_df['published_on'], format = "%Y-%m-%d")
-                date_three_months_ago = datetime.date.today() + relativedelta(months=-3)
-                ads_df_3_months = ads_df[ads_df['published_on'] >= pd.to_datetime(date_three_months_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
 
         #### Analysis results ####
-                placeholder = st.empty()
-                with placeholder.container():
+                with st.container():
                     st.subheader(f"""
                             This is how your WG compares to other WGs published in the past three months:
                             """)
                     col1, col2, col3, col4 = st.columns(4)
 
-            #### Number ads ####
-                    ## Same city
-                    ads_df_city = ads_df_3_months[ads_df_3_months['city'] == list(ad_df_processed['city'])[0]]
-                    n_posts_city = len(ads_df_city)
-                    n_days_post_city = round(90/n_posts_city,1)
-                    n_hours_post_city = round((24*90)/n_posts_city,1)
-
-                    ## Same zip
-                    ads_df_zip_code = ads_df_3_months[ads_df_3_months['zip_code'] == list(ad_df_processed['zip_code'])[0]]
-                    n_posts_zipcode = len(ads_df_zip_code)
-                    n_days_post_zipcode = round(90/n_posts_zipcode,1)
-                    n_hours_post_zipcode = round((24*90)/n_posts_zipcode,1)
-
+        #### Number ads ####
                     col1.markdown(f"""
                             <font size= "4">**Number of ads posted**</font>
                             """, unsafe_allow_html=True)
 
                     col1.markdown(f"""
-                            <font size= "4">On average, <span style="color:tomato">**{n_hours_post_city if n_days_post_city <= 1 else n_days_post_city}**</span> WG room ads were posted in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> every {'hour' if n_days_post_city <= 1 else 'day'}.
+                            <font size= "4">On average, <span style="color:tomato">**{ad_df_analysis_dict['n_hours_post_city'] if ad_df_analysis_dict['n_days_post_city'] <= 1 else ad_df_analysis_dict['n_days_post_city']}**</span> WG room ads were posted in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> every {'hour' if ad_df_analysis_dict['n_days_post_city'] <= 1 else 'day'}.
 
-                            <span style="color:tomato">**{n_hours_post_zipcode if n_days_post_zipcode <= 1 else n_days_post_zipcode}**</span> WG room ads with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span> were posted every {'hour' if n_days_post_zipcode <= 1 else 'day'}.</font>
+                            <span style="color:tomato">**{ad_df_analysis_dict['n_hours_post_zipcode'] if ad_df_analysis_dict['n_days_post_zipcode'] <= 1 else ad_df_analysis_dict['n_days_post_zipcode']}**</span> WG room ads with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span> were posted every {'hour' if ad_df_analysis_dict['n_days_post_zipcode'] <= 1 else 'day'}.</font>
                             """, unsafe_allow_html=True)
 
-            #### Size room ####
-                    ## Smaller size
-                    ads_df_smaller = ads_df_3_months[ads_df_3_months['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
-                    percent_smaller = round(100*(len(ads_df_smaller)/len(ads_df_3_months)),1)
-
-                    ## Smaller zip_code
-                    ads_df_smaller_zipcode = ads_df_zip_code[ads_df_zip_code['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
-                    percent_smaller_zipcode = round(100*(len(ads_df_smaller_zipcode)/len(ads_df_zip_code)),1)
-
+        #### Size room ####
                     col2.markdown(f"""
                             <font size= "4">**Size of the room**</font>
                             """, unsafe_allow_html=True)
 
                     col2.markdown(f"""
-                            <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG room is bigger than <span style="color:tomato">**{percent_smaller} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_smaller_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG room is bigger than <span style="color:tomato">**{ad_df_analysis_dict['percent_smaller']} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{ad_df_analysis_dict['percent_smaller_zipcode']} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
                             """, unsafe_allow_html=True)
 
-            #### Price ####
-                    ## Cheaper city
-                    ads_df_cheaper = ads_df_3_months[ads_df_3_months['price_euros'] < list(ad_df_processed['price_euros'])[0]]
-                    percent_cheaper = round(100*(len(ads_df_cheaper)/len(ads_df_3_months)),1)
-
-                    ## Cheaper zip_code
-                    ads_df_cheaper_zipcode = ads_df_zip_code[ads_df_zip_code['price_euros'] < list(ad_df_processed['price_euros'])[0]]
-                    percent_cheaper_zipcode = round(100*(len(ads_df_cheaper_zipcode)/len(ads_df_zip_code)),1)
-
+        #### Price ####
                     col3.markdown(f"""
                             <font size= "4">**WG price**</font>
                             """, unsafe_allow_html=True)
 
                     col3.markdown(f"""
-                            <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG room is more expensive than <span style="color:tomato">**{percent_cheaper} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_cheaper_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG room is more expensive than <span style="color:tomato">**{ad_df_analysis_dict['percent_cheaper']} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{ad_df_analysis_dict['percent_cheaper_zipcode']} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
                             """, unsafe_allow_html=True)
 
-            #### Factors influencing price ####
-                    # Size
-                    wg_is_large = True if percent_smaller_zipcode > 50 else False
-
-                    # Location
-                    ads_df_not_zip_code = ads_df_city[ads_df_city['zip_code'] != list(ad_df_processed['zip_code'])[0]]
-                    ads_df_not_zip_code = ads_df_not_zip_code[ads_df_not_zip_code['zip_code'].notna()]
-                    mean_zip_code = ads_df_zip_code['price_euros'].mean()
-                    mean_not_zip_code = ads_df_not_zip_code['price_euros'].mean()
-
-                    import scipy.stats as stats
-                    #perform two sample t-test with equal variances
-                    p_value = stats.ttest_ind(a=ads_df_zip_code['price_euros'], b=ads_df_not_zip_code['price_euros'], equal_var = True, nan_policy = 'omit', random_state = 42)
-                    if p_value[1] <=0.05:
-                        if mean_zip_code > mean_not_zip_code:
-                            zip_is_more = 'pricier'
-                        else:
-                            zip_is_more = 'cheaper'
-                    else:
-                        zip_is_more = 'similar'
-
-
-
-                    # schufa_needed
-                    schufa_needed = str(list(ad_df_processed['schufa_needed'])[0]) == '1'
-
-                    # commercial_landlord
-                    commercial_landlord = str(list(ad_df_processed['commercial_landlord'])[0]) == '1'
-
-                    # capacity
-                    capacity = int(list(ad_df_processed['capacity'])[0])
-
-                    # days_available
-                    days_available = int(list(ad_df_processed['days_available'])[0])
-
-                    # wg_type_studenten
-                    wg_type_studenten = str(list(ad_df_processed['wg_type_studenten'])[0]) == '1'
-
-                    # wg_type_business
-                    wg_type_business = str(list(ad_df_processed['wg_type_business'])[0]) == '1'
-
-                    # building_type
-                    building_type = str(list(ad_df_processed['building_type'])[0])
-
-
+        #### Factors influencing price ####
                     col4.markdown(f"""
                             <font size= "4">**Possible factors affecting price**</font>
                             """, unsafe_allow_html=True)
 
 
                     def generate_text_possible_price_factors():
-                        prompts = ['\n','- Room is large' if percent_smaller_zipcode >= 70 else '- Room is small' if percent_smaller_zipcode <= 30 else '' +\
-                            '- WG in pricier neighborhood' if zip_is_more == 'pricier' else '- WG in cheaper neighborhood' if zip_is_more == 'cheaper' else '',
+                        prompts = ['\n','- Room is large' if ad_df_analysis_dict['percent_smaller_zipcode'] >= 70 else '- Room is small' if ad_df_analysis_dict['percent_smaller_zipcode'] <= 30 else '' +\
+                            '- WG in pricier neighborhood' if ad_df_analysis_dict['zip_is_more'] == 'pricier' else '- WG in cheaper neighborhood' if ad_df_analysis_dict['zip_is_more'] == 'cheaper' else '',
 
-                            '- WGs in ' + building_type + ' building type tend to be pricier' if building_type == 'Neubau' or building_type == 'Hochhaus' else '- WGs in ' + building_type + ' building type tend to be cheaper' if building_type == 'Einfamilienhaus' else '',
+                            '- WGs in ' + ad_df_analysis_dict['building_type'] + ' building type tend to be pricier' if ad_df_analysis_dict['building_type'] == 'Neubau' or ad_df_analysis_dict['building_type'] == 'Hochhaus' else '- WGs in ' + ad_df_analysis_dict['building_type'] + ' building type tend to be cheaper' if ad_df_analysis_dict['building_type'] == 'Einfamilienhaus' else '',
 
-                            '- Students WG type tend to be cheaper' if wg_type_studenten else '',
+                            '- Students WG type tend to be cheaper' if ad_df_analysis_dict['wg_type_studenten'] else '',
 
-                            '- Business WG type tend to be pricier' if wg_type_business else '',
+                            '- Business WG type tend to be pricier' if ad_df_analysis_dict['wg_type_business'] else '',
 
-                            '- WGs that require Schufa tend to be pricier' if schufa_needed else '',
+                            '- WGs that require Schufa tend to be pricier' if ad_df_analysis_dict['schufa_needed'] else '',
 
-                            '- WGs with companies as landlord tend to be pricier' if commercial_landlord else '',
+                            '- WGs with companies as landlord tend to be pricier' if ad_df_analysis_dict['commercial_landlord'] else '',
 
-                            '- WGs with capacity for ' + str(capacity) + ' people tend to be pricier' if capacity >= 5 else '- WGs for only 2 people tend to be cheaper' if capacity == 2 else '',
+                            '- WGs with capacity for ' + str(ad_df_analysis_dict['capacity']) + ' people tend to be pricier' if ad_df_analysis_dict['capacity'] >= 5 else '- WGs for only 2 people tend to be cheaper' if ad_df_analysis_dict['capacity'] == 2 else '',
 
-                            '- Short-term rental WGs (<30 days) tend to be cheaper' if days_available <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if days_available > 540 else '']
+                            '- Short-term rental WGs (<30 days) tend to be cheaper' if ad_df_analysis_dict['days_available'] <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if ad_df_analysis_dict['days_available'] > 540 else '']
 
                         return '\n'.join(text for text in prompts if text != '')
 
@@ -844,70 +924,107 @@ with tab1:
                                     """, unsafe_allow_html=True)
 
 
-            #### Price prediction ####
-                '\n'
-                '\n'
-                placeholder_prediction = st.empty()
-                with placeholder_prediction.container():
+        #### Price prediction ####
+                if ad_df_analysis_dict['ad_evaluation'] is not None:
+                    '\n'
+                    '\n'
                     st.markdown(f"""
-                            <font size= "4">**Rent price fairness**</font>
+                            <font size= "6">**Rent price fairness**</font>
                             """, unsafe_allow_html=True)
+                    with st.container():
 
-                    try:
-                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
-                    except ValueError: # cold_rent_euros is nan
+                        if ad_df_analysis_dict['ad_evaluation'] == 'Overpriced':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
+                        elif ad_df_analysis_dict['ad_evaluation'] == 'Fairly priced':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
+                        elif ad_df_analysis_dict['ad_evaluation'] == 'Underpriced':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
+
+                        # Display predictions
                         st.markdown(f"""
-                            The ad did not include the cold rent price for this room. Estimating cold rent price from warm rent.
-                            """, unsafe_allow_html=True)
+                                    The predicted warm rent for this offer is: <span style="color:tomato">**{ad_df_analysis_dict['warm_rent_pred']} €**</span>. This prediction is composed of the predicted cold rent ({ad_df_analysis_dict['cold_rent_pred']} €), plus invariant mandatory and extra costs taken from the ad page. In the ad page, this WG room is priced at <span style="color:tomato">**{int(ad_df_processed['price_euros'])} €**</span> (warm rent). {ad_evaluation}.
+                                    """, unsafe_allow_html=True)
 
-                        import statsmodels.api as sm
-
-
-                        # create predictive model for cold rent from warm rent
-                        wg_df_foo = ads_df_3_months[ads_df_3_months['cold_rent_euros'].notna()]
-                        wg_df_foo = wg_df_foo[wg_df_foo['price_euros'].notna()]
-                        model_cold_from_warm = sm.OLS(wg_df_foo.cold_rent_euros, wg_df_foo.price_euros).fit()
-
-                        # # Add cold rent predictions only if cold_rent_euros is nan
-                        ad_df_processed['cold_rent_euros'] = int(model_cold_from_warm.predict(ad_df_processed['price_euros'])[0])
-
-                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
-
-
-                    ### Load model for prediction locally ###
-                    # I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
-                    trained_model = get_latest_model_from_db()
-
-
-                    # Predict expected cold_rent_euros
-                    pred_price_sqm = float(trained_model.predict(ad_df_processed))
-                    cold_rent_pred = int(float(pred_price_sqm*ad_df_processed['size_sqm']))
-
-                    # Calculate extra costs
-                    extra_costs_total = int(list(ad_df_processed['price_euros'])[0]) - int(list(ad_df_processed['cold_rent_euros'])[0])
-
-                    warm_rent_pred =  int(cold_rent_pred + extra_costs_total)
-
-
-                    ## Ad evaluation
-                    ad_evaluation = 'over' if int(ad_df_processed['price_euros']) > warm_rent_pred*1.2 else 'under' if int(ad_df_processed['price_euros']) < warm_rent_pred*1.2 else 'fair'
-
-
-                    if ad_evaluation == 'over':
-                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
-                    elif ad_evaluation == 'fair':
-                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
-                    elif ad_evaluation == 'under':
-                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
-
-                    # Display predictions
-                    st.markdown(f"""
-                                The predicted warm rent for this offer is: <span style="color:tomato">**{warm_rent_pred} €**</span>. This prediction is composed of the predicted cold rent ({cold_rent_pred} €), plus invariant mandatory and extra costs taken from the ad page. In the ad page, this WG room is priced at <span style="color:tomato">**{int(ad_df_processed['price_euros'])} €**</span> (warm rent). {ad_evaluation}.
+                        st.markdown(f"""
+                                <font size= "2">*There are two types of rent prices: cold and warm rent. Cold rent is the basic price of the rent, while warm rent usually includes the cold rent, water, heating and house maintenance costs. Warm rent may also include internet and TV/radio/internet taxes and other invariant costs.</font>
                                 """, unsafe_allow_html=True)
 
+
+        #### WG room recommendations ####
+                with st.container():
+                    '\n'
+                    '\n'
                     st.markdown(f"""
-                            <font size= "2">*There are two types of rent prices: cold and warm rent. Cold rent is the basic price of the rent, while warm rent usually includes the cold rent, water, heating and house maintenance costs. Warm rent may also include internet and TV/radio/internet taxes and other invariant costs.</font>
+                            <font size= "6">**Similar WG rooms**</font>
                             """, unsafe_allow_html=True)
+                    with st.spinner(f'Obtaining similar WG rooms.'):
+
+                        ## Filter city
+                        ads_df_recommendation = ads_df[ads_df['city'] == list(ad_df_processed['city'])[0]]
+
+                        ## Filter distance
+                        lat_ad = float(list(ad_df_processed['latitude'])[0])
+                        lon_ad = float(list(ad_df_processed['longitude'])[0])
+
+                        for _day in [5,4,3,2,1]:
+                            for _price in [0.3,0.2,0.1,0.05]:
+                                for _square in [12000,8000,4000,2000,1000,500]:
+                                    if len(ads_df_recommendation) > 10 or len(ads_df_recommendation)<3:
+
+                                        lat_max = lat_ad + m_to_coord(_square, latitude=lat_ad, direction='north')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] <=lat_max]
+
+                                        lat_min = lat_ad - m_to_coord(_square, latitude=lat_ad, direction='south')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] >=lat_min]
+
+                                        lon_max = lon_ad + m_to_coord(_square, latitude=lat_ad, direction='west')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] <=lon_max]
+
+                                        lon_min = lon_ad - m_to_coord(_square, latitude=lat_ad, direction='east')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] >=lon_min]
+
+
+                                        ## Filter price
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['price_euros'] >= int(list(ad_df_processed['price_euros'])[0])*(1-_price)]
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['price_euros'] <= int(list(ad_df_processed['price_euros'])[0])*(1+_price)]
+
+
+                                        ## Filter publication date
+                                        selected_days_ago = datetime.date.today() + relativedelta(days=-_day)
+
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['published_on'] >= pd.to_datetime(selected_days_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
+                                    else:
+                                        break
+
+
+
+                    if len(ads_df_recommendation) > 0:
+                        evaluations = []
+                        for _foo in range(1,len(ads_df_recommendation)+1):
+                            _df = ads_df_recommendation.head(_foo).tail(1)
+                            evaluations.append(analyse_df_ad(ads_db = ads_df, ad_df = _df)['ad_evaluation'])
+
+                        recomm_ads = {}
+                        recomm_ads['Ad title'] = list(ads_df_recommendation['title'])
+                        recomm_ads['WG address'] = list(ads_df_recommendation['address'])
+                        recomm_ads['Price (€)'] = list(ads_df_recommendation['price_euros'].astype('int'))
+                        recomm_ads['Room size (sqm)'] = list(ads_df_recommendation['size_sqm'].astype('int'))
+                        recomm_ads['Flatmates'] = list(ads_df_recommendation['capacity'].astype('int')-1)
+                        recomm_ads['Available from'] = list(ads_df_recommendation['available_from'])
+                        recomm_ads['Available until'] = [item if item == item else "Open end" for item in list(ads_df_recommendation['available_to'])]
+                        recomm_ads['Our price evaluation'] = evaluations
+                        recomm_ads['Link'] = list(ads_df_recommendation['url'])
+
+                        # Create dataframe
+                        recomm_ads = pd.DataFrame.from_dict(recomm_ads)
+
+
+                        recomm_ads
+                    else:
+                        st.markdown(f"""
+                                <font size= "4">We could not find similar WG rooms recently published on wg-gesucht.de.</font>
+                                """, unsafe_allow_html=True)
+
 
 
 
@@ -1139,8 +1256,6 @@ with tab2:
         # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
         ads_df = get_data_from_db().copy()
 
-        ad_df_processed = None
-
         #### Checking inputted info is correct format
         if _city == "<Please select>":
             st.error(f"""
@@ -1243,165 +1358,82 @@ with tab2:
                     st.success('WG room info obtained!', icon="✅")
 
             else:
+                ad_df_processed = None
                 st.error(f"""
                         The provided address is invalid: {full_address}
                         """, icon="🚨")
 
 
-        if ad_df_processed is not None:
-            with st.spinner(f'Analysing information. This could take a minute.'):
-
+            if ad_df_processed is not None:
 
         #### Collect files needed for analysis ####
                 ### Obtain main ads table ###
                 # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
                 ads_df = get_data_from_db().copy()
+
                 ### Filter data for analysis ###
-                ## WGs only
-                ads_df = ads_df[ads_df['type_offer_simple'] == 'WG']
+                ad_df_analysis_dict = analyse_df_ad(ads_db = ads_df, ad_df = ad_df_processed)
 
-                ## Remove ad of interest from database
-                ads_df = ads_df[ads_df['id'] != list(ad_df_processed['id'])[0]]
-
-
-                ## Filter for past 3 months only
-                # Format dates properly
-                ads_df['published_on'] = pd.to_datetime(ads_df['published_on'], format = "%Y-%m-%d")
-                date_three_months_ago = datetime.date.today() + relativedelta(months=-3)
-                ads_df_3_months = ads_df[ads_df['published_on'] >= pd.to_datetime(date_three_months_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
 
         #### Analysis results ####
-                placeholder = st.empty()
-                with placeholder.container():
+                with st.container():
                     st.subheader(f"""
                             This is how your WG compares to other WGs published in the past three months:
                             """)
                     col1, col2, col3, col4 = st.columns(4)
 
-            #### Number ads ####
-                    ## Same city
-                    ads_df_city = ads_df_3_months[ads_df_3_months['city'] == list(ad_df_processed['city'])[0]]
-                    n_posts_city = len(ads_df_city)
-                    n_days_post_city = round(90/n_posts_city,1)
-                    n_hours_post_city = round((24*90)/n_posts_city,1)
-
-                    ## Same zip
-                    ads_df_zip_code = ads_df_3_months[ads_df_3_months['zip_code'] == list(ad_df_processed['zip_code'])[0]]
-                    n_posts_zipcode = len(ads_df_zip_code)
-                    n_days_post_zipcode = round(90/n_posts_zipcode,1)
-                    n_hours_post_zipcode = round((24*90)/n_posts_zipcode,1)
-
+        #### Number ads ####
                     col1.markdown(f"""
                             <font size= "4">**Number of ads posted**</font>
                             """, unsafe_allow_html=True)
 
                     col1.markdown(f"""
-                            <font size= "4">On average, <span style="color:tomato">**{n_hours_post_city if n_days_post_city <= 1 else n_days_post_city}**</span> WG room ads were posted in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> every {'hour' if n_days_post_city <= 1 else 'day'}.
+                            <font size= "4">On average, <span style="color:tomato">**{ad_df_analysis_dict['n_hours_post_city'] if ad_df_analysis_dict['n_days_post_city'] <= 1 else ad_df_analysis_dict['n_days_post_city']}**</span> WG room ads were posted in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> every {'hour' if ad_df_analysis_dict['n_days_post_city'] <= 1 else 'day'}.
 
-                            <span style="color:tomato">**{n_hours_post_zipcode if n_days_post_zipcode <= 1 else n_days_post_zipcode}**</span> WG room ads with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span> were posted every {'hour' if n_days_post_zipcode <= 1 else 'day'}.</font>
+                            <span style="color:tomato">**{ad_df_analysis_dict['n_hours_post_zipcode'] if ad_df_analysis_dict['n_days_post_zipcode'] <= 1 else ad_df_analysis_dict['n_days_post_zipcode']}**</span> WG room ads with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span> were posted every {'hour' if ad_df_analysis_dict['n_days_post_zipcode'] <= 1 else 'day'}.</font>
                             """, unsafe_allow_html=True)
 
-            #### Size room ####
-                    ## Smaller size
-                    ads_df_smaller = ads_df_3_months[ads_df_3_months['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
-                    percent_smaller = round(100*(len(ads_df_smaller)/len(ads_df_3_months)),1)
-
-                    ## Smaller zip_code
-                    ads_df_smaller_zipcode = ads_df_zip_code[ads_df_zip_code['size_sqm'] < list(ad_df_processed['size_sqm'])[0]]
-                    percent_smaller_zipcode = round(100*(len(ads_df_smaller_zipcode)/len(ads_df_zip_code)),1)
-
+        #### Size room ####
                     col2.markdown(f"""
                             <font size= "4">**Size of the room**</font>
                             """, unsafe_allow_html=True)
 
                     col2.markdown(f"""
-                            <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG room is bigger than <span style="color:tomato">**{percent_smaller} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_smaller_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            <font size= "4">With <span style="color:tomato">**{list(ad_df_processed['size_sqm'])[0]} sqm**</span>, this WG room is bigger than <span style="color:tomato">**{ad_df_analysis_dict['percent_smaller']} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{ad_df_analysis_dict['percent_smaller_zipcode']} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
                             """, unsafe_allow_html=True)
 
-            #### Price ####
-                    ## Cheaper city
-                    ads_df_cheaper = ads_df_3_months[ads_df_3_months['price_euros'] < list(ad_df_processed['price_euros'])[0]]
-                    percent_cheaper = round(100*(len(ads_df_cheaper)/len(ads_df_3_months)),1)
-
-                    ## Cheaper zip_code
-                    ads_df_cheaper_zipcode = ads_df_zip_code[ads_df_zip_code['price_euros'] < list(ad_df_processed['price_euros'])[0]]
-                    percent_cheaper_zipcode = round(100*(len(ads_df_cheaper_zipcode)/len(ads_df_zip_code)),1)
-
+        #### Price ####
                     col3.markdown(f"""
                             <font size= "4">**WG price**</font>
                             """, unsafe_allow_html=True)
 
                     col3.markdown(f"""
-                            <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG room is more expensive than <span style="color:tomato">**{percent_cheaper} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{percent_cheaper_zipcode} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
+                            <font size= "4">Costing <span style="color:tomato">**{list(ad_df_processed['price_euros'])[0]} €**</span>, this WG room is more expensive than <span style="color:tomato">**{ad_df_analysis_dict['percent_cheaper']} %**</span> of WG rooms in <span style="color:tomato">**{list(ad_df_processed['city'])[0]}**</span> and <span style="color:tomato">**{ad_df_analysis_dict['percent_cheaper_zipcode']} %**</span> of WG rooms with the same ZIP code <span style="color:tomato">**{list(ad_df_processed['zip_code'])[0]}**</span>.</font>
                             """, unsafe_allow_html=True)
 
-            #### Factors influencing price ####
-                    # Size
-                    wg_is_large = True if percent_smaller_zipcode > 50 else False
-
-                    # Location
-                    ads_df_not_zip_code = ads_df_city[ads_df_city['zip_code'] != list(ad_df_processed['zip_code'])[0]]
-                    ads_df_not_zip_code = ads_df_not_zip_code[ads_df_not_zip_code['zip_code'].notna()]
-                    mean_zip_code = ads_df_zip_code['price_euros'].mean()
-                    mean_not_zip_code = ads_df_not_zip_code['price_euros'].mean()
-
-                    import scipy.stats as stats
-                    #perform two sample t-test with equal variances
-                    p_value = stats.ttest_ind(a=ads_df_zip_code['price_euros'], b=ads_df_not_zip_code['price_euros'], equal_var = True, nan_policy = 'omit', random_state = 42)
-                    if p_value[1] <=0.05:
-                        if mean_zip_code > mean_not_zip_code:
-                            zip_is_more = 'pricier'
-                        else:
-                            zip_is_more = 'cheaper'
-                    else:
-                        zip_is_more = 'similar'
-
-
-
-                    # schufa_needed
-                    schufa_needed = str(list(ad_df_processed['schufa_needed'])[0]) == '1'
-
-                    # commercial_landlord
-                    commercial_landlord = str(list(ad_df_processed['commercial_landlord'])[0]) == '1'
-
-                    # capacity
-                    capacity = int(list(ad_df_processed['capacity'])[0])
-
-                    # days_available
-                    days_available = int(list(ad_df_processed['days_available'])[0])
-
-                    # wg_type_studenten
-                    wg_type_studenten = str(list(ad_df_processed['wg_type_studenten'])[0]) == '1'
-
-                    # wg_type_business
-                    wg_type_business = str(list(ad_df_processed['wg_type_business'])[0]) == '1'
-
-                    # building_type
-                    building_type = str(list(ad_df_processed['building_type'])[0])
-
-
+        #### Factors influencing price ####
                     col4.markdown(f"""
                             <font size= "4">**Possible factors affecting price**</font>
                             """, unsafe_allow_html=True)
 
 
                     def generate_text_possible_price_factors():
-                        prompts = ['\n','- Room is large' if percent_smaller_zipcode >= 70 else '- Room is small' if percent_smaller_zipcode <= 30 else '' +\
-                            '- WG in pricier neighborhood' if zip_is_more == 'pricier' else '- WG in cheaper neighborhood' if zip_is_more == 'cheaper' else '',
+                        prompts = ['\n','- Room is large' if ad_df_analysis_dict['percent_smaller_zipcode'] >= 70 else '- Room is small' if ad_df_analysis_dict['percent_smaller_zipcode'] <= 30 else '' +\
+                            '- WG in pricier neighborhood' if ad_df_analysis_dict['zip_is_more'] == 'pricier' else '- WG in cheaper neighborhood' if ad_df_analysis_dict['zip_is_more'] == 'cheaper' else '',
 
-                            '- WGs in ' + building_type + ' building type tend to be pricier' if building_type == 'Neubau' or building_type == 'Hochhaus' else '- WGs in ' + building_type + ' building type tend to be cheaper' if building_type == 'Einfamilienhaus' else '',
+                            '- WGs in ' + ad_df_analysis_dict['building_type'] + ' building type tend to be pricier' if ad_df_analysis_dict['building_type'] == 'Neubau' or ad_df_analysis_dict['building_type'] == 'Hochhaus' else '- WGs in ' + ad_df_analysis_dict['building_type'] + ' building type tend to be cheaper' if ad_df_analysis_dict['building_type'] == 'Einfamilienhaus' else '',
 
-                            '- Students WG type tend to be cheaper' if wg_type_studenten else '',
+                            '- Students WG type tend to be cheaper' if ad_df_analysis_dict['wg_type_studenten'] else '',
 
-                            '- Business WG type tend to be pricier' if wg_type_business else '',
+                            '- Business WG type tend to be pricier' if ad_df_analysis_dict['wg_type_business'] else '',
 
-                            '- WGs that require Schufa tend to be pricier' if schufa_needed else '',
+                            '- WGs that require Schufa tend to be pricier' if ad_df_analysis_dict['schufa_needed'] else '',
 
-                            '- WGs with companies as landlord tend to be pricier' if commercial_landlord else '',
+                            '- WGs with companies as landlord tend to be pricier' if ad_df_analysis_dict['commercial_landlord'] else '',
 
-                            '- WGs with capacity for ' + str(capacity) + ' people tend to be pricier' if capacity >= 5 else '- WGs for only 2 people tend to be cheaper' if capacity == 2 else '',
+                            '- WGs with capacity for ' + str(ad_df_analysis_dict['capacity']) + ' people tend to be pricier' if ad_df_analysis_dict['capacity'] >= 5 else '- WGs for only 2 people tend to be cheaper' if ad_df_analysis_dict['capacity'] == 2 else '',
 
-                            '- Short-term rental WGs (<30 days) tend to be cheaper' if days_available <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if days_available > 540 else '']
+                            '- Short-term rental WGs (<30 days) tend to be cheaper' if ad_df_analysis_dict['days_available'] <= 30 else '- WGs with open-end rental time availability tend to be cheaper' if ad_df_analysis_dict['days_available'] > 540 else '']
 
                         return '\n'.join(text for text in prompts if text != '')
 
@@ -1410,70 +1442,108 @@ with tab2:
                                     """, unsafe_allow_html=True)
 
 
-            #### Price prediction ####
-                '\n'
-                '\n'
-                placeholder_prediction = st.empty()
-                with placeholder_prediction.container():
+        #### Price prediction ####
+                if ad_df_analysis_dict['ad_evaluation'] is not None:
+                    '\n'
+                    '\n'
                     st.markdown(f"""
-                            <font size= "4">**Rent price fairness**</font>
+                            <font size= "6">**Rent price fairness**</font>
                             """, unsafe_allow_html=True)
+                    with st.container():
 
-                    try:
-                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
-                    except ValueError: # cold_rent_euros is nan
+                        if ad_df_analysis_dict['ad_evaluation'] == 'Overpriced':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
+                        elif ad_df_analysis_dict['ad_evaluation'] == 'Fairly priced':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
+                        elif ad_df_analysis_dict['ad_evaluation'] == 'Underpriced':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
+
+                        # Display predictions
                         st.markdown(f"""
-                            The ad did not include the cold rent price for this room. Estimating cold rent price from warm rent.
-                            """, unsafe_allow_html=True)
+                                    The predicted warm rent for this offer is: <span style="color:tomato">**{ad_df_analysis_dict['warm_rent_pred']} €**</span>. This prediction is composed of the predicted cold rent ({ad_df_analysis_dict['cold_rent_pred']} €), plus invariant mandatory and extra costs taken from the ad page. In the ad page, this WG room is priced at <span style="color:tomato">**{int(ad_df_processed['price_euros'])} €**</span> (warm rent). {ad_evaluation}.
+                                    """, unsafe_allow_html=True)
 
-                        import statsmodels.api as sm
-
-
-                        # create predictive model for cold rent from warm rent
-                        wg_df_foo = ads_df_3_months[ads_df_3_months['cold_rent_euros'].notna()]
-                        wg_df_foo = wg_df_foo[wg_df_foo['price_euros'].notna()]
-                        model_cold_from_warm = sm.OLS(wg_df_foo.cold_rent_euros, wg_df_foo.price_euros).fit()
-
-                        # # Add cold rent predictions only if cold_rent_euros is nan
-                        ad_df_processed['cold_rent_euros'] = int(model_cold_from_warm.predict(ad_df_processed['price_euros'])[0])
-
-                        cold_rent = int(list(ad_df_processed['cold_rent_euros'])[0])
-
-
-                    ### Load model for prediction locally ###
-                    # I did not manage to load it from Github wg_price_predictor repository using pickle, joblib nor cloudpickle
-                    trained_model = get_latest_model_from_db()
-
-
-                    # Predict expected cold_rent_euros
-                    pred_price_sqm = float(trained_model.predict(ad_df_processed))
-                    cold_rent_pred = int(float(pred_price_sqm*ad_df_processed['size_sqm']))
-
-                    # Calculate extra costs
-                    extra_costs_total = int(list(ad_df_processed['price_euros'])[0]) - int(list(ad_df_processed['cold_rent_euros'])[0])
-
-                    warm_rent_pred =  int(cold_rent_pred + extra_costs_total)
-
-
-                    ## Ad evaluation
-                    ad_evaluation = 'over' if int(ad_df_processed['price_euros']) > warm_rent_pred*1.2 else 'under' if int(ad_df_processed['price_euros']) < warm_rent_pred*1.2 else 'fair'
-
-
-                    if ad_evaluation == 'over':
-                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
-                    elif ad_evaluation == 'fair':
-                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
-                    elif ad_evaluation == 'under':
-                        ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
-
-                    # Display predictions
-                    st.markdown(f"""
-                                The predicted warm rent for this offer is: <span style="color:tomato">**{warm_rent_pred} €**</span>. This prediction is composed of the predicted cold rent ({cold_rent_pred} €), plus invariant mandatory and extra costs taken from the ad page. In the ad page, this WG room is priced at <span style="color:tomato">**{int(ad_df_processed['price_euros'])} €**</span> (warm rent). {ad_evaluation}.
+                        st.markdown(f"""
+                                <font size= "2">*There are two types of rent prices: cold and warm rent. Cold rent is the basic price of the rent, while warm rent usually includes the cold rent, water, heating and house maintenance costs. Warm rent may also include internet and TV/radio/internet taxes and other invariant costs.</font>
                                 """, unsafe_allow_html=True)
 
+
+        #### WG room recommendations ####
+                with st.container():
+                    '\n'
+                    '\n'
                     st.markdown(f"""
-                            <font size= "2">*There are two types of rent prices: cold and warm rent. Cold rent is the basic price of the rent, while warm rent usually includes the cold rent, water, heating and house maintenance costs. Warm rent may also include internet and TV/radio/internet taxes and other invariant costs.</font>
+                            <font size= "6">**Similar WG rooms**</font>
                             """, unsafe_allow_html=True)
+                    with st.spinner(f'Obtaining similar WG rooms.'):
+
+                        ## Filter city
+                        ads_df_recommendation = ads_df[ads_df['city'] == list(ad_df_processed['city'])[0]]
+
+                        ## Filter distance
+                        lat_ad = float(list(ad_df_processed['latitude'])[0])
+                        lon_ad = float(list(ad_df_processed['longitude'])[0])
+
+                        for _day in [5,4,3,2,1]:
+                            for _price in [0.3,0.2,0.1,0.05]:
+                                for _square in [12000,8000,4000,2000,1000,500]:
+                                    if len(ads_df_recommendation) > 10 or len(ads_df_recommendation)<3:
+
+                                        lat_max = lat_ad + m_to_coord(_square, latitude=lat_ad, direction='north')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] <=lat_max]
+
+                                        lat_min = lat_ad - m_to_coord(_square, latitude=lat_ad, direction='south')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['latitude'] >=lat_min]
+
+                                        lon_max = lon_ad + m_to_coord(_square, latitude=lat_ad, direction='west')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] <=lon_max]
+
+                                        lon_min = lon_ad - m_to_coord(_square, latitude=lat_ad, direction='east')
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['longitude'] >=lon_min]
+
+
+                                        ## Filter price
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['price_euros'] >= int(list(ad_df_processed['price_euros'])[0])*(1-_price)]
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['price_euros'] <= int(list(ad_df_processed['price_euros'])[0])*(1+_price)]
+
+
+                                        ## Filter publication date
+                                        selected_days_ago = datetime.date.today() + relativedelta(days=-_day)
+
+                                        ads_df_recommendation = ads_df_recommendation[ads_df_recommendation['published_on'] >= pd.to_datetime(selected_days_ago.strftime("%Y-%m-%d"), format = "%Y-%m-%d")]
+                                    else:
+                                        break
+
+
+
+                    if len(ads_df_recommendation) > 0:
+                        evaluations = []
+                        for _foo in range(1,len(ads_df_recommendation)+1):
+                            _df = ads_df_recommendation.head(_foo).tail(1)
+                            evaluations.append(analyse_df_ad(ads_db = ads_df, ad_df = _df)['ad_evaluation'])
+
+                        recomm_ads = {}
+                        recomm_ads['Ad title'] = list(ads_df_recommendation['title'])
+                        recomm_ads['WG address'] = list(ads_df_recommendation['address'])
+                        recomm_ads['Price (€)'] = list(ads_df_recommendation['price_euros'].astype('int'))
+                        recomm_ads['Room size (sqm)'] = list(ads_df_recommendation['size_sqm'].astype('int'))
+                        recomm_ads['Flatmates'] = list(ads_df_recommendation['capacity'].astype('int')-1)
+                        recomm_ads['Available from'] = list(ads_df_recommendation['available_from'])
+                        recomm_ads['Available until'] = [item if item == item else "Open end" for item in list(ads_df_recommendation['available_to'])]
+                        recomm_ads['Our price evaluation'] = evaluations
+                        recomm_ads['Link'] = list(ads_df_recommendation['url'])
+
+                        # Create dataframe
+                        recomm_ads = pd.DataFrame.from_dict(recomm_ads)
+
+
+                        recomm_ads
+                    else:
+                        st.markdown(f"""
+                                <font size= "4">We could not find similar WG rooms recently published on wg-gesucht.de.</font>
+                                """, unsafe_allow_html=True)
+
+
 
 
 

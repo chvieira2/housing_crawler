@@ -1032,6 +1032,23 @@ def obtain_latest_model():
     pkl_files = sorted([file_name.split('/')[-1] for file_name in pkl_files])
     return pickle.load(open(f'{directory}/{pkl_files[-1]}','rb'))
 
+def m_to_coord(m, latitude=52.52, direction='east'):
+    """
+        Takes an offset in meters in a given direction (north, south, east and west) at a given latitude and returns the corresponding value in lat (north or south) or lon (east or west) degrees
+        Uses the French approximation.
+        More info here: https://gis.stackexchange.com/questions/2951/algorithm-for-offsetting-a-latitude-longitude-by-some-amount-of-meters
+    """
+    import math
+
+    # Coordinate offsets in radians
+    if direction in ['x', 'east', 'west', 'e', 'w']:
+        latitude = math.pi*latitude/180 # Convert latitude to raians
+        return abs(m/(111_111*math.cos(latitude)))
+    elif direction in ['y', 'north', 'south', 'n', 's']:
+        return abs(m/111_111)
+    return None
+
+
 if __name__ == "__main__":
 
     print(crawl_ind_ad_page2('https://www.wg-gesucht.de/wg-zimmer-in-Hannover-Sudstadt.9060306.html'))

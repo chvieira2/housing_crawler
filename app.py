@@ -100,7 +100,9 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 # ---------------------- FUNCTIONS ----------------------
 @st.cache
-def get_data_from_db(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
+def get_data_from_db(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data',
+                     filter_ad_type = None # 'WG'
+                     ):
     """
     Method to get data from local environment and return a unified dataframe
 
@@ -111,7 +113,8 @@ def get_data_from_db(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
     ads_db['published_on'] = pd.to_datetime(ads_db['published_on'], format = "%Y-%m-%d")
 
     ## WGs only
-    ads_db = ads_db[ads_db['type_offer_simple'] == 'WG']
+    if filter_ad_type is not None:
+        ads_db = ads_db[ads_db['type_offer_simple'] == filter_ad_type]
 
     return ads_db
 
@@ -851,7 +854,7 @@ with tab1:
         #### Collect files needed for analysis ####
                 ### Obtain main ads table ###
                 # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-                ads_df = get_data_from_db().copy()
+                ads_df = get_data_from_db(filter_ad_type = 'WG').copy()
 
                 ### Filter data for analysis ###
                 ad_df_analysis_dict = analyse_df_ad(ads_db = ads_df, ad_df = ad_df_processed)
@@ -1254,7 +1257,7 @@ with tab2:
         ### Obtain main ads table ###
         #############################
         # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-        ads_df = get_data_from_db().copy()
+        ads_df = get_data_from_db(filter_ad_type = 'WG').copy()
 
         #### Checking inputted info is correct format
         if _city == "<Please select>":
@@ -1367,9 +1370,6 @@ with tab2:
             if ad_df_processed is not None:
 
         #### Collect files needed for analysis ####
-                ### Obtain main ads table ###
-                # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-                ads_df = get_data_from_db().copy()
 
                 ### Filter data for analysis ###
                 ad_df_analysis_dict = analyse_df_ad(ads_db = ads_df, ad_df = ad_df_processed)

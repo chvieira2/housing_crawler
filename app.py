@@ -800,7 +800,7 @@ with tab1:
     with st.form("entry_url", clear_on_submit=False):
         st.text_input("Your wg-gesucht link:", value="", key='url', max_chars = 250)
 
-        submitted_url = st.form_submit_button("Submit url")
+        submitted_url = st.form_submit_button("Submit")
 
 
 
@@ -1243,7 +1243,7 @@ with tab2:
                 _extras = ", ".join([item.split('/')[1] for item in _extras])
 
             "---"
-            submitted_form = st.form_submit_button("Submit form")
+            submitted_form = st.form_submit_button("Submit")
 
 
 

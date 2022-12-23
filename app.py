@@ -25,7 +25,7 @@ import numpy as np
 import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pickle
+# import cloudpickle
 import statsmodels.api as sm
 import scipy.stats as stats
 
@@ -174,7 +174,7 @@ def ads_per_region_stacked_barplot(df,time_period, city):
         st.markdown(f'Ads published on wg-gesucht.de in {city} in the {time_period.lower()}.', unsafe_allow_html=True)
     else:
         stacking_by = 'city'
-        st.markdown(f'Ads published on wg-gesucht.de in the selected 25 cities in Germany in the {time_period.lower()}.', unsafe_allow_html=True)
+        st.markdown(f'Ads published on wg-gesucht.de in the selected {len(dict_city_number_wggesucht.keys())} cities in Germany in the {time_period.lower()}.', unsafe_allow_html=True)
 
 
 
@@ -201,6 +201,80 @@ def ads_per_region_stacked_barplot(df,time_period, city):
         fig.update_layout(xaxis_title='Zip code')
     else:
         fig.update_layout(xaxis_title=None)
+
+    return fig
+
+def price_ad_per_day_per_region(df,time_period, city,
+                                target = 'price_per_sqm_cold'#'price_euros'
+                                ):
+
+    ## Format dates properly
+    df['published_on'] = pd.to_datetime(df['published_on'], format = "%Y-%m-%d")
+    # Filter ads in between desired dates.
+    date_max = pd.to_datetime(time.strftime("%Y-%m-%d", time.localtime()), format = "%Y-%m-%d")
+
+    if time_period == 'Past week':
+        date_min = datetime.date.today() + relativedelta(weeks=-1)
+        date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+    elif time_period == 'Past month':
+        date_min = datetime.date.today() + relativedelta(months=-1)
+        date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+    elif time_period == 'Past three months':
+        date_min = datetime.date.today() + relativedelta(months=-3)
+        date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+    elif time_period == 'Past six months':
+        date_min = datetime.date.today() + relativedelta(months=-6)
+        date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+    elif time_period == 'Past year':
+        date_min = datetime.date.today() + relativedelta(months=-12)
+        date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+    else:
+        date_min = datetime.date.today() + relativedelta(months=-48)
+        date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+
+    df['temp_col'] = df['published_on'].apply(lambda x: x >= date_min and x <= date_max)
+    df = df[df['temp_col']].drop(columns=['temp_col'])
+
+
+
+    ## Filter type of offer
+    if st.session_state["market_type"] != 'All':
+        df = df[df['type_offer_simple'] == st.session_state["market_type"]].reset_index().drop(columns=['index'])
+
+    #### Create tables to use
+    # City
+    df_city = df[df['city'] == city]
+
+    # Germany
+    # Add Germany average for comparison with city
+    germany_ads_df = df[[target, 'published_on']].groupby(['published_on']).mean().sort_values(by = ['published_on'], ascending=False).reset_index()
+    germany_ads_df['city'] = 'Germany'
+
+
+    if city == 'Germany':
+                region_ads_df = germany_ads_df
+    else:
+        region_ads_df = df_city[[target, 'city', 'published_on']].groupby(['city', 'published_on']).mean().sort_values(by = ['published_on'], ascending=False).reset_index()
+        region_ads_df = pd.concat([region_ads_df, germany_ads_df])
+
+
+
+    fig = px.line(region_ads_df, x='published_on', y=target, color='city',
+            labels={
+                'city': "Region",
+                target: f'Average rent price per day ({"€" if target == "price_euros" else "€/m²"})'
+            },
+            template = "ggplot2" #["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white", "none"]
+            )
+    fig.update_layout(height=300,
+                        font_family="Arial",
+                        margin= dict(
+                        l = 10,        # left
+                        r = 10,        # right
+                        t = 25,        # top
+                        b = 0,        # bottom
+                ))
+    fig.update_layout(xaxis_title=None)
 
     return fig
 
@@ -1546,11 +1620,6 @@ with tab2:
 
 
 
-
-
-
-
-
 with tab3:
     st.markdown("""
                 ### This dashboard contains everything you want to know about WGs in Germany!
@@ -1563,7 +1632,7 @@ with tab3:
         col1.selectbox("Analysis period:", ['Past week','Past month', 'Past three months', 'Past six months'],#, 'Past year'],
                        key="time_period", index=2)
         col2.selectbox("City:", ['Germany'] + sorted(list(dict_city_number_wggesucht.keys())), key="city_filter", index=0)
-        col3.selectbox("Market type:", ['WG', 'Single-room flat', 'Apartment'], key="market_type", index=0)
+        col3.selectbox("Market type:", ['All', 'Apartment', 'Single-room flat', 'WG'], key="market_type", index=3)
 
         "---"
         submitted = st.form_submit_button("Show results")
@@ -1583,23 +1652,39 @@ with tab3:
 
 
             ## Filter type of offer
-            market_type_df = df_filtered[df_filtered['type_offer_simple'] == st.session_state["market_type"]].reset_index().drop(columns=['index'])
+            if st.session_state["market_type"] != 'All':
+                market_type_df = df_filtered[df_filtered['type_offer_simple'] == st.session_state["market_type"]].reset_index().drop(columns=['index'])
 
 
-            ### TODO
             ### Plot price evolution
+            with st.container():
+                col1, col2, col3 = st.columns([0.05,1,0.05])
+                with col2:
+                    if st.session_state["city_filter"] == 'Germany':
+                        st.markdown(f'Daily price of ads published on wg-gesucht.de in top {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'Daily price of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
+
+                col1, col2 = st.columns([1,1])
+                with col1:
+                    st.plotly_chart(price_ad_per_day_per_region(df = ads_df,
+                                                                target = 'price_euros',
+                                                                time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
+                with col2:
+                    st.plotly_chart(price_ad_per_day_per_region(df = ads_df,
+                                                                target = 'price_per_sqm_cold',
+                                                                time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
+
 
             ### Plotting ads per market type
-            placeholder = st.empty()
-            with placeholder.container():
+            with st.container():
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
                     st.plotly_chart(ads_per_region_stacked_barplot(df = df_filtered, time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
 
 
             ### Plotting ads per day
-            placeholder = st.empty()
-            with placeholder.container():
+            with st.container():
                 col1, col2, col3 = st.columns([1,0.05,0.45])
                 with col1:
                     st.plotly_chart(ads_per_day_stacked_barplot(df = market_type_df, city = st.session_state["city_filter"], time_period = st.session_state["time_period"],market_type = st.session_state["market_type"]), height=400, use_container_width=True)

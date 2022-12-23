@@ -126,13 +126,13 @@ def get_latest_model_from_db():
     """
     return obtain_latest_model()
 
-def filter_original_data(df, city, time_period):
+def filter_original_data(df, city, time_period, market_type_df):
     ## Format dates properly
     df['published_on'] = pd.to_datetime(df['published_on'], format = "%Y-%m-%d")
 
     ## Filter table
     # City of choice
-    if st.session_state["city_filter"] != 'Germany':
+    if city != 'Germany':
         df = df[df['city'] == city]
 
 
@@ -165,20 +165,29 @@ def filter_original_data(df, city, time_period):
     ### Correcting Zip format
     df['zip_code'] = df['zip_code'].apply(lambda x: 'No address' if x != x else str(int(x)))
 
+
+
+
+
+    ### Filter type of offer
+    if market_type_df != 'All':
+        df = df[df['type_offer_simple'] == market_type_df].reset_index().drop(columns=['index'])
+
     return df
 
 def ads_per_region_stacked_barplot(df,time_period, city):
 
-    if city != 'Germany':
-        stacking_by = 'zip_code'
-        st.markdown(f'Ads published on wg-gesucht.de in {city} in the {time_period.lower()}.', unsafe_allow_html=True)
-    else:
+    if city == 'Germany':
         stacking_by = 'city'
         st.markdown(f'Ads published on wg-gesucht.de in the selected {len(dict_city_number_wggesucht.keys())} cities in Germany in the {time_period.lower()}.', unsafe_allow_html=True)
 
+        region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
+    else:
+        stacking_by = 'zip_code'
+        st.markdown(f'Ads published on wg-gesucht.de in {city} in the {time_period.lower()}.', unsafe_allow_html=True)
 
-
-    region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
+        region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
+        # region_ads_df = region_ads_df.head(25)
 
 
     fig = px.bar(region_ads_df, x=stacking_by, y="count", color="type_offer_simple",
@@ -1648,12 +1657,8 @@ with tab3:
             #### Filter data for analysis
             df_filtered = filter_original_data(df = ads_df,
                                             city = st.session_state["city_filter"],
-                                            time_period = st.session_state["time_period"])
-
-
-            ## Filter type of offer
-            if st.session_state["market_type"] != 'All':
-                market_type_df = df_filtered[df_filtered['type_offer_simple'] == st.session_state["market_type"]].reset_index().drop(columns=['index'])
+                                            time_period = st.session_state["time_period"],
+                                            market_type_df = st.session_state["market_type"])
 
 
             ### Plot price evolution
@@ -1687,9 +1692,9 @@ with tab3:
             with st.container():
                 col1, col2, col3 = st.columns([1,0.05,0.45])
                 with col1:
-                    st.plotly_chart(ads_per_day_stacked_barplot(df = market_type_df, city = st.session_state["city_filter"], time_period = st.session_state["time_period"],market_type = st.session_state["market_type"]), height=400, use_container_width=True)
+                    st.plotly_chart(ads_per_day_stacked_barplot(df = df_filtered, city = st.session_state["city_filter"], time_period = st.session_state["time_period"],market_type = st.session_state["market_type"]), height=400, use_container_width=True)
                 with col3:
-                    st.plotly_chart(ads_per_hour_line_polar(df = market_type_df, city = st.session_state["city_filter"], time_period = st.session_state["time_period"],market_type = st.session_state["market_type"]), height=400, use_container_width=True)
+                    st.plotly_chart(ads_per_hour_line_polar(df = df_filtered, city = st.session_state["city_filter"], time_period = st.session_state["time_period"],market_type = st.session_state["market_type"]), height=400, use_container_width=True)
 
 
             st.markdown(f"""
@@ -1701,7 +1706,12 @@ with tab3:
             with placeholder.container():
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
-                    st.pyplot(price_rank_cities(df = df_filtered, city = st.session_state["city_filter"]))
+                    st.pyplot(price_rank_cities(df = filter_original_data(df = ads_df,
+                                            city = st.session_state["city_filter"],
+                                            time_period = st.session_state["time_period"],
+                                            market_type_df = 'All'),
+
+                                            city = st.session_state["city_filter"]))
 
             st.markdown("""
                 *Values displayed here are **warm** rental prices that more accurately reflect living costs. Warm rent usually include the cold rent, water, heating and house maintenance costs. It may also include internet and TV/Radio/Internet taxes.
@@ -1743,10 +1753,10 @@ with tab4:
             #### Filter data for analysis
     df_filtered = filter_original_data(df = ads_df,
                                         city = 'Germany',
-                                        time_period = 'Past three months')
+                                        time_period = 'Past three months',
+                                        market_type_df = 'All')
 
-    placeholder = st.empty()
-    with placeholder.container():
+    with st.container():
         col1, col2 = st.columns([0.5,0.4])
         with col1:
             st.markdown("""
@@ -1758,8 +1768,7 @@ with tab4:
                 """, unsafe_allow_html=True)
 
 
-    placeholder = st.empty()
-    with placeholder.container():
+    with st.container():
         col1, col2, col3 = st.columns([0.35,0.35,0.6])
         with col1:
             df_foo = df_filtered[~df_filtered['wg_type_business'].isnull()]
@@ -1794,8 +1803,7 @@ with tab4:
 
 
 
-    placeholder = st.empty()
-    with placeholder.container():
+    with st.container():
         col1, col2, col3 = st.columns([0.6,0.33,0.33])
         with col1:
             st.markdown("""
@@ -1813,8 +1821,7 @@ with tab4:
             """, unsafe_allow_html=True)
 
 
-    placeholder = st.empty()
-    with placeholder.container():
+    with st.container():
         col1, col2, col3 = st.columns([0.6,0.33,0.33])
         with col1:
             df_foo = df_filtered
@@ -1851,8 +1858,7 @@ with tab4:
                                             fig_height = 20))
 
 
-    placeholder = st.empty()
-    with placeholder.container():
+    with st.container():
         col1, col2, col3 = st.columns([0.1,1,0.1])
         with col2:
             st.markdown("""

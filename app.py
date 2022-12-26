@@ -99,7 +99,7 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
 # ---------------------- FUNCTIONS ----------------------
-@st.cache
+@st.cache(allow_output_mutation=True)
 def get_data_from_db(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data',
                      filter_ad_type = None # 'WG'
                      ):
@@ -213,13 +213,15 @@ def ads_per_region_stacked_barplot(df,time_period, city):
 
     return fig
 
-def price_ad_per_day_per_region(df,time_period, city,
+def price_evolution_per_region(df,time_period, city,
                                 target = 'price_per_sqm_cold'#'price_euros'
                                 ):
 
     ## Format dates properly
     df['published_on'] = pd.to_datetime(df['published_on'], format = "%Y-%m-%d")
-    # Filter ads in between desired dates.
+
+
+    ## Filter ads in between desired dates.
     date_max = pd.to_datetime(time.strftime("%Y-%m-%d", time.localtime()), format = "%Y-%m-%d")
 
     if time_period == 'Past week':
@@ -250,28 +252,38 @@ def price_ad_per_day_per_region(df,time_period, city,
     if st.session_state["market_type"] != 'All':
         df = df[df['type_offer_simple'] == st.session_state["market_type"]].reset_index().drop(columns=['index'])
 
+
+    ### Create the column that will be used for grouping
+    start_date = pd.Timestamp('2022-08-01')
+    end_date = pd.Timestamp.today()
+    dates_range = pd.date_range(start_date, end_date, freq='7D').to_pydatetime().tolist()
+
+    df['grouping_date'] = df['published_on'].apply(lambda x: [date for date in dates_range if date <= x][-1])
+
+
+
     #### Create tables to use
     # City
     df_city = df[df['city'] == city]
 
     # Germany
     # Add Germany average for comparison with city
-    germany_ads_df = df[[target, 'published_on']].groupby(['published_on']).mean().sort_values(by = ['published_on'], ascending=False).reset_index()
+    germany_ads_df = df[[target, 'grouping_date']].groupby(['grouping_date']).mean().sort_values(by = ['grouping_date'], ascending=False).reset_index()
     germany_ads_df['city'] = 'Germany'
 
 
     if city == 'Germany':
                 region_ads_df = germany_ads_df
     else:
-        region_ads_df = df_city[[target, 'city', 'published_on']].groupby(['city', 'published_on']).mean().sort_values(by = ['published_on'], ascending=False).reset_index()
+        region_ads_df = df_city[[target, 'city', 'grouping_date']].groupby(['city', 'grouping_date']).mean().sort_values(by = ['grouping_date'], ascending=False).reset_index()
         region_ads_df = pd.concat([region_ads_df, germany_ads_df])
 
 
 
-    fig = px.line(region_ads_df, x='published_on', y=target, color='city',
+    fig = px.line(region_ads_df, x='grouping_date', y=target, color='city',
             labels={
                 'city': "Region",
-                target: f'Average rent price per day ({"€" if target == "price_euros" else "€/m²"})'
+                target: f'Weekly average {"warm" if target == "price_euros" else "warm" if target == "price_per_sqm_warm" else "cold"} rent price ({"€" if target == "price_euros" else "€" if target == "cold_rent_euros" else "€/m²"})'
             },
             template = "ggplot2" #["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white", "none"]
             )
@@ -1651,8 +1663,7 @@ with tab3:
             ### Obtain main ads table ###
             #############################
             # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-            ads_df = get_data_from_db().copy()
-
+            ads_df = get_data_from_db()
 
             #### Filter data for analysis
             df_filtered = filter_original_data(df = ads_df,
@@ -1666,17 +1677,23 @@ with tab3:
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
                     if st.session_state["city_filter"] == 'Germany':
-                        st.markdown(f'Daily price of ads published on wg-gesucht.de in top {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
+                        st.markdown(f'Price evolution of ads published on wg-gesucht.de in the top {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
                     else:
-                        st.markdown(f'Daily price of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
+                        st.markdown(f'Price evolution of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
 
                 col1, col2 = st.columns([1,1])
                 with col1:
-                    st.plotly_chart(price_ad_per_day_per_region(df = ads_df,
+                    st.plotly_chart(price_evolution_per_region(df = ads_df,
                                                                 target = 'price_euros',
                                                                 time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
+                    st.plotly_chart(price_evolution_per_region(df = ads_df,
+                                                                target = 'price_per_sqm_warm',
+                                                                time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
                 with col2:
-                    st.plotly_chart(price_ad_per_day_per_region(df = ads_df,
+                    st.plotly_chart(price_evolution_per_region(df = ads_df,
+                                                                target = 'cold_rent_euros',
+                                                                time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
+                    st.plotly_chart(price_evolution_per_region(df = ads_df,
                                                                 target = 'price_per_sqm_cold',
                                                                 time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
 

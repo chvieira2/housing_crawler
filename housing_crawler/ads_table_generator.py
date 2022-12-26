@@ -120,45 +120,49 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = 
     year = time.strftime(f"%Y", time.localtime())
     month = time.strftime(f"%m", time.localtime())
     # for year in ['2022']:#,'2023']:
-    for month in ['08','09','10','11','12']:
-        csvs_list = []
-        for city in cities:
-            city = standardize_characters(city)
+    # for month in ['08','09','10','11','12']:
+    csvs_list = []
+    for city in cities:
+        city = standardize_characters(city)
 
-            file_name = f'{year}{month}_{city}_ads.csv'
-            try:
-                df_city = get_file(file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
-            except FileNotFoundError:
-                print(f'{file_name} was not found')
-                pass
+        file_name = f'{year}{month}_{city}_ads.csv'
+        try:
+            df_city = get_file(file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
+        except FileNotFoundError:
+            print(f'{file_name} was not found')
+            pass
 
-            # Update older searches with newer feautures, like geocoding of addresses or collecting ad specific info
-            df_city = fix_older_table(df_city, city=city, file_name=file_name)
-
-
-            save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
-
-            csvs_list.append(df_city)
+        # Update older searches with newer feautures, like geocoding of addresses or collecting ad specific info
+        df_city = fix_older_table(df_city, city=city, file_name=file_name)
 
 
-        all_ads_df = pd.concat(csvs_list)
-        print(f'======= {len(csvs_list)} csvs were collected. There are {len(all_ads_df)} ads in total the month: {year}{month}. =======')
+        save_file(df_city, file_name=file_name, local_file_path=f'housing_crawler/data/{city}/Ads')
+
+        csvs_list.append(df_city)
 
 
-        all_ads_df = all_ads_df[all_ads_df['published_on'] >= '01.08.2022']
-        save_file(all_ads_df, f'{year}{month}_ads_encoded.csv', local_file_path='raw_data')
-        print("\n###############################################")
-        print("######### Finished encoding ads table #########")
-        print("###############################################\n")
+    all_ads_df = pd.concat(csvs_list)
+    print(f'======= {len(csvs_list)} csvs were collected. There are {len(all_ads_df)} ads in total the month: {year}{month}. =======')
 
-        if create_OSM_table:
-            print("\n========================================")
-            print("========= Processing ads table =========")
-            print("========================================\n")
-            process_ads_tables(all_ads_df, year=year, month=month)
-            print("\n#################################################")
-            print("######### Finished processing ads table #########")
-            print("#################################################\n")
+
+    save_file(all_ads_df, f'{year}{month}_ads_encoded.csv', local_file_path='raw_data')
+    print("\n###############################################")
+    print("######### Finished encoding ads table #########")
+    print("###############################################\n")
+
+    if create_OSM_table:
+        # Make sure only ads from that month are included.
+        all_ads_df['published_on'] = pd.to_datetime(all_ads_df['published_on'], infer_datetime_format=True)
+        all_ads_df = all_ads_df[all_ads_df['published_on'] >= pd.to_datetime(f'01.{month}.{year}', format = "%d.%m.%Y")]
+        all_ads_df['published_on'] = all_ads_df['published_on'].dt.strftime('%d.%m.%Y')
+
+        print("\n========================================")
+        print("========= Processing ads table =========")
+        print("========================================\n")
+        process_ads_tables(all_ads_df, year=year, month=month)
+        print("\n#################################################")
+        print("######### Finished processing ads table #########")
+        print("#################################################\n")
 
     if train_model:
         print("\n==========================================")

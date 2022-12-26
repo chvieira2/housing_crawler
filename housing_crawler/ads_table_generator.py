@@ -120,7 +120,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = 
     year = time.strftime(f"%Y", time.localtime())
     month = time.strftime(f"%m", time.localtime())
     # for year in ['2022']:#,'2023']:
-    #     for month in ['07','08','09','10','11','12']:
+    # for month in ['08','09','10','11','12']:
     csvs_list = []
     for city in cities:
         city = standardize_characters(city)
@@ -155,7 +155,7 @@ def collect_cities_csvs(cities = dict_city_number_wggesucht, create_OSM_table = 
         print("\n========================================")
         print("========= Processing ads table =========")
         print("========================================\n")
-        process_ads_tables(all_ads_df)
+        process_ads_tables(all_ads_df, year=year, month=month)
         print("\n#################################################")
         print("######### Finished processing ads table #########")
         print("#################################################\n")

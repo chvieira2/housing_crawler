@@ -548,6 +548,9 @@ def feature_engineering(ads_df, df_feats_tag = None):
 
     print('Engineering features...')
 
+    # Create days_since_2022 as linear scale of date
+    ads_df['days_since_2022'] = (ads_df['published_on'] - pd.to_datetime('01/01/2022')).dt.days
+
     # Create day of the week column with first 3 letters of the day name
     ads_df['day_of_week_publication'] = ads_df['published_on'].dt.day_name()
     ads_df['day_of_week_publication'] = [day[0:3] for day in list(ads_df['day_of_week_publication'])]
@@ -779,10 +782,13 @@ def imputing_values(ads_df):
 
     return ads_df
 
-def process_ads_tables(input_ads_df = None, save_processed = True, df_feats_tag = None):
+def process_ads_tables(input_ads_df = None, save_processed = True, df_feats_tag = None, year = None, month = None):
 
-    year = time.strftime(f"%Y", time.localtime())
-    month = time.strftime(f"%m", time.localtime())
+    if year is None:
+        year = time.strftime(f"%Y", time.localtime())
+    if month is None:
+        month = time.strftime(f"%m", time.localtime())
+
     if input_ads_df is None:
         input_ads_df = get_file(file_name=f'''{str(year)}{str(month)}_ads_encoded.csv''', local_file_path='raw_data')
 

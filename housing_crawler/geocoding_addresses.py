@@ -90,19 +90,19 @@ def geocoding_address(address, sleep_time = 900, retry=True):
             print(f'Weird address format: "{address}"')
             pass
 
-        # If still haven't found anything
-        if pd.isnull(lat) or pd.isnull(lon):
-            # Retry without street
-            try:
-                zip_code = address.split(',')[1].strip().replace('  ', ' ')
-                city_name = address.split(',')[2].strip().replace('  ', ' ')
-                address_without_street = ', '.join([zip_code, city_name]).strip().replace('  ', ' ')
-                print(f'Search did not work with "{address_without_neigh}". Trying with "{address_without_street}"')
-                time.sleep(3) # Sleep before trying again to avoid getting stuck
-                lat,lon = geocoding_address(address=address_without_street, retry=False)
-            except IndexError:
-                print(f'Weird address format: "{address}"')
-                pass
+        # # If still haven't found anything
+        # if pd.isnull(lat) or pd.isnull(lon):
+        #     # Retry without street
+        #     try:
+        #         zip_code = address.split(',')[1].strip().replace('  ', ' ')
+        #         city_name = address.split(',')[2].strip().replace('  ', ' ')
+        #         address_without_street = ', '.join([zip_code, city_name]).strip().replace('  ', ' ')
+        #         print(f'Search did not work with "{address_without_neigh}". Trying with "{address_without_street}"')
+        #         time.sleep(3) # Sleep before trying again to avoid getting stuck
+        #         lat,lon = geocoding_address(address=address_without_street, retry=False)
+        #     except IndexError:
+        #         print(f'Weird address format: "{address}"')
+        #         pass
 
         # If still haven't found anything
         if pd.isnull(lat) or pd.isnull(lon):

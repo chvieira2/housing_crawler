@@ -184,6 +184,11 @@ def ads_per_region_stacked_barplot(df,time_period, city):
         region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
     else:
         stacking_by = 'zip_code'
+        df['temp'] = df['zip_code'].apply(lambda x: len(str(x)) > 3 and len(str(x)) < 6\
+            and str(x) not in ['1234', '12345','0000', '1111', '2222', '3333', '4444','5555','6666','7777','8888','9999','00000', '11111', '22222', '33333', '44444','55555','66666','77777','88888','99999'] and not str(x).startswith('0') )
+        df = df[df['temp']]
+
+
         st.markdown(f'Ads published on wg-gesucht.de in {city} in the {time_period.lower()}.', unsafe_allow_html=True)
 
         region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
@@ -214,7 +219,7 @@ def ads_per_region_stacked_barplot(df,time_period, city):
     return fig
 
 def price_evolution_per_region(df,time_period, city,
-                                target = 'price_per_sqm_cold'#'price_euros'
+                                target = 'price_per_sqm_cold'#'price_euros',
                                 ):
 
     ## Format dates properly
@@ -227,21 +232,33 @@ def price_evolution_per_region(df,time_period, city,
     if time_period == 'Past week':
         date_min = datetime.date.today() + relativedelta(weeks=-1)
         date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+        agg_days = '1D'
+        add_days_title = 'Daily'
     elif time_period == 'Past month':
         date_min = datetime.date.today() + relativedelta(months=-1)
         date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+        agg_days = '3D'
+        add_days_title = '3-days'
     elif time_period == 'Past three months':
         date_min = datetime.date.today() + relativedelta(months=-3)
         date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+        agg_days = '5D'
+        add_days_title = '5-days'
     elif time_period == 'Past six months':
         date_min = datetime.date.today() + relativedelta(months=-6)
         date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+        agg_days = '7D'
+        add_days_title = 'Weekly'
     elif time_period == 'Past year':
         date_min = datetime.date.today() + relativedelta(months=-12)
         date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+        agg_days = '14D'
+        add_days_title = '2-weeks'
     else:
         date_min = datetime.date.today() + relativedelta(months=-48)
         date_min = pd.to_datetime(date_min.strftime("%Y-%m-%d"), format = "%Y-%m-%d")
+        agg_days = '30D'
+        add_days_title = 'Monthly'
 
     df['temp_col'] = df['published_on'].apply(lambda x: x >= date_min and x <= date_max)
     df = df[df['temp_col']].drop(columns=['temp_col'])
@@ -256,7 +273,7 @@ def price_evolution_per_region(df,time_period, city,
     ### Create the column that will be used for grouping
     start_date = pd.Timestamp('2022-08-01')
     end_date = pd.Timestamp.today()
-    dates_range = pd.date_range(start_date, end_date, freq='7D').to_pydatetime().tolist()
+    dates_range = pd.date_range(start_date, end_date, freq=agg_days).to_pydatetime().tolist()
 
     df['grouping_date'] = df['published_on'].apply(lambda x: [date for date in dates_range if date <= x][-1])
 
@@ -283,7 +300,7 @@ def price_evolution_per_region(df,time_period, city,
     fig = px.line(region_ads_df, x='grouping_date', y=target, color='city',
             labels={
                 'city': "Region",
-                target: f'Weekly average {"warm" if target == "price_euros" else "warm" if target == "price_per_sqm_warm" else "cold"} rent price ({"€" if target == "price_euros" else "€" if target == "cold_rent_euros" else "€/m²"})'
+                target: f'{add_days_title} average {"warm" if target == "price_euros" else "warm" if target == "price_per_sqm_warm" else "cold"} rent price ({"€" if target == "price_euros" else "€" if target == "cold_rent_euros" else "€/m²"})'
             },
             template = "ggplot2" #["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white", "none"]
             )
@@ -303,6 +320,11 @@ def ads_per_day_stacked_barplot(df,city,time_period,market_type):
 
     if city != 'Germany':
         stacking_by = 'zip_code'
+
+        df['temp'] = df['zip_code'].apply(lambda x: len(str(x)) > 3 and len(str(x)) < 6\
+            and str(x) not in ['1234', '12345','0000', '1111', '2222', '3333', '4444','5555','6666','7777','8888','9999','00000', '11111', '22222', '33333', '44444','55555','66666','77777','88888','99999'] and not str(x).startswith('0') )
+        df = df[df['temp']]
+
     else:
         stacking_by = 'city'
 
@@ -388,6 +410,11 @@ def price_rank_cities(df,city):
 
     if city != 'Germany':
         stacking_by = 'zip_code'
+
+        df['temp'] = df['zip_code'].apply(lambda x: len(str(x)) > 3 and len(str(x)) < 6\
+            and str(x) not in ['1234', '12345','0000', '1111', '2222', '3333', '4444','5555','6666','7777','8888','9999','00000', '11111', '22222', '33333', '44444','55555','66666','77777','88888','99999'] and not str(x).startswith('0') )
+        df = df[df['temp']]
+
     else:
         stacking_by = 'city'
 
@@ -727,8 +754,8 @@ def pred_from_df(ad_df):
 
 
     # Predict expected cold_rent_euros
-    pred_price_sqm = float(trained_model.predict(ad_df))
-    return int(float(pred_price_sqm*ad_df['size_sqm']))
+    pred_price_warm = float(trained_model.predict(ad_df))
+    return int(float(pred_price_warm))
 
 @st.cache(allow_output_mutation=True)
 def analyse_df_ad(ads_db: pd.DataFrame, ad_df: pd.DataFrame):
@@ -857,7 +884,7 @@ def analyse_df_ad(ads_db: pd.DataFrame, ad_df: pd.DataFrame):
 
 
         ## Ad evaluation
-        analysis_dict['ad_evaluation'] = 'Overpriced' if int(ad_df_processed['price_euros']) > analysis_dict['warm_rent_pred']*1.2 else 'Underpriced' if int(ad_df_processed['price_euros']) < analysis_dict['warm_rent_pred']*1.2 else 'Fairly priced'
+        analysis_dict['ad_evaluation'] = 'High price' if int(ad_df_processed['price_euros']) > analysis_dict['warm_rent_pred']*1.2 else 'Low price' if int(ad_df_processed['price_euros']) < analysis_dict['warm_rent_pred']*1.2 else 'Fairly priced'
     except:
         analysis_dict['ad_evaluation'] = None
 
@@ -885,7 +912,7 @@ st.markdown("""
 ###############################################
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["Analyse WG from url link", "Analyse my own WG",
                                         "Overview of the WG market",
-                                        'The predictive model of WG prices', 'About'])
+                                        'Artificial Inteligence model of WG prices', 'About'])
 
 with tab1:
     st.markdown("""
@@ -1031,12 +1058,12 @@ with tab1:
                             """, unsafe_allow_html=True)
                     with st.container():
 
-                        if ad_df_analysis_dict['ad_evaluation'] == 'Overpriced':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
+                        if ad_df_analysis_dict['ad_evaluation'] == 'High price':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by AI our model. Therefore the offered price has a <span style="color:tomato">**HIGH**</span> price in our opinion"""
                         elif ad_df_analysis_dict['ad_evaluation'] == 'Fairly priced':
                             ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
-                        elif ad_df_analysis_dict['ad_evaluation'] == 'Underpriced':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
+                        elif ad_df_analysis_dict['ad_evaluation'] == 'Low price':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by AI our model. Therefore the offered price has a <span style="color:tomato">**LOW**</span> price in our opinion"""
 
                         # Display predictions
                         st.markdown(f"""
@@ -1546,12 +1573,12 @@ with tab2:
                             """, unsafe_allow_html=True)
                     with st.container():
 
-                        if ad_df_analysis_dict['ad_evaluation'] == 'Overpriced':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**OVERPRICED**</span>"""
+                        if ad_df_analysis_dict['ad_evaluation'] == 'High price':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our AI model. Therefore the offered price has a <span style="color:tomato">**HIGH**</span> price in our opinion"""
                         elif ad_df_analysis_dict['ad_evaluation'] == 'Fairly priced':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
-                        elif ad_df_analysis_dict['ad_evaluation'] == 'Underpriced':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our model. Therefore the offered price is in our opinion <span style="color:tomato">**UNDERPRICED**</span>"""
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our AI model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
+                        elif ad_df_analysis_dict['ad_evaluation'] == 'Low price':
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our AI model. Therefore the offered price has a <span style="color:tomato">**LOW**</span> price in our opinion"""
 
                         # Display predictions
                         st.markdown(f"""

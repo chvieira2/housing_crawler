@@ -27,14 +27,14 @@ def train_models():
     # Filter ads later than Aug 2022
     ads_df = ads_df[ads_df['published_on'] >= '2022-08-01']
 
-    # Filter ads without a 'price_per_sqm_cold' (nan values)
-    ads_df = ads_df.dropna(subset=['price_per_sqm_cold'])
+    # Filter ads without a 'price_euros' (nan values)
+    ads_df = ads_df.dropna(subset=['price_euros'])
 
     # Create the week_number tag
     ads_df['week_number'] = ads_df['published_on'].apply(lambda x: x.strftime("%Y")) +'W'+ ads_df['published_on'].apply(lambda x: x.strftime("%V"))
 
     # Obtain the untrained pipeline with best model. Ideally this sould get it from GitHub but I didn'T manage to make it work with pickle, joblib nor cloudpickle libraries
-    prep_pipeline = pickle.load(open(f'{ROOT_DIR}/model/Pipeline_Ridge_untrained.pkl','rb'))
+    prep_pipeline = pickle.load(open(f'{ROOT_DIR}/model/PredPipeline_allcities_price_euros_LogTarget_untrained.pkl','rb'))
 
     # prep_pipeline = cloudpickle.load(urlopen("https://github.com/chvieira2/wg_price_predictor/blob/main/wg_price_predictor/models/PredPipeline_WG_allcities_price_per_sqm_cold_untrained.pkl"))
     # # UnpicklingError: invalid load key, '\x0a'.
@@ -50,10 +50,10 @@ def train_models():
         else:
             ## Check if week's model has been previously trained
             try:
-                trained_model = pickle.load(open(f'{ROOT_DIR}/model/trained_models/Ridge/Pipeline_Ridge_trained_{week_number}.pkl','rb'))
+                trained_model = pickle.load(open(f'{ROOT_DIR}/model/trained_models/PipelineTrained_allcities_price_euros_LogTarget_{week_number}.pkl','rb'))
                 pass
             except:
-                print(f"Pipeline_Ridge_trained_{week_number}.pkl doesn't exist. Creating it.")
+                print(f"PipelineTrained_allcities_price_euros_LogTarget_{week_number}.pkl doesn't exist. Creating it.")
                 # Identify monday of that week
                 monday_week = pd.to_datetime(week_number + '-1', format = "%GW%V-%w")
 
@@ -61,10 +61,10 @@ def train_models():
                 ads_df_filtered_week = ads_df[ads_df['published_on'] <= monday_week]
 
                 # Train model
-                trained_model = prep_pipeline.fit(ads_df_filtered_week.drop(columns='price_per_sqm_cold'), ads_df_filtered_week['price_per_sqm_cold'])
+                trained_model = prep_pipeline.fit(ads_df_filtered_week.drop(columns='price_euros'), ads_df_filtered_week['price_euros'])
 
                 # Save (dump) trained model for that week
-                with open(f"{ROOT_DIR}/model/trained_models/Ridge/Pipeline_Ridge_trained_{week_number}.pkl", "wb") as file:
+                with open(f"{ROOT_DIR}/model/trained_models/PipelineTrained_allcities_price_euros_LogTarget_{week_number}.pkl", "wb") as file:
                     pickle.dump(trained_model, file)
 
 

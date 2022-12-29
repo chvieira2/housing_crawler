@@ -1024,7 +1024,7 @@ def get_data(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
     return pd.concat(csvs_list)
 
 def obtain_latest_model():
-    directory = f'{ROOT_DIR}/model/trained_models/Ridge'
+    directory = f'{ROOT_DIR}/model/trained_models'
     pkl_files = []
     for file in os.listdir(directory):
         if file.endswith(".pkl"):

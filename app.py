@@ -274,6 +274,7 @@ def price_evolution_per_region(df,time_period, city,
     start_date = pd.Timestamp('2022-08-01')
     end_date = pd.Timestamp.today()
     dates_range = pd.date_range(start_date, end_date, freq=agg_days).to_pydatetime().tolist()
+    print(dates_range)
 
     df['grouping_date'] = df['published_on'].apply(lambda x: [date for date in dates_range if date <= x][-1])
 

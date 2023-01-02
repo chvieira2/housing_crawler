@@ -10,6 +10,7 @@ __maintainer__ = "chvieira2"
 __email__ = "carloshvieira2@gmail.com"
 __status__ = "Production"
 
+from curses import BUTTON_SHIFT
 from config.config import ROOT_DIR
 
 
@@ -179,7 +180,6 @@ def ads_per_region_stacked_barplot(df,time_period, city):
 
     if city == 'Germany':
         stacking_by = 'city'
-        st.markdown(f'Ads published on wg-gesucht.de in the selected {len(dict_city_number_wggesucht.keys())} cities in Germany in the {time_period.lower()}.', unsafe_allow_html=True)
 
         region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
     else:
@@ -188,8 +188,6 @@ def ads_per_region_stacked_barplot(df,time_period, city):
             and str(x) not in ['1234', '12345','0000', '1111', '2222', '3333', '4444','5555','6666','7777','8888','9999','00000', '11111', '22222', '33333', '44444','55555','66666','77777','88888','99999'] and not str(x).startswith('0') )
         df = df[df['temp']]
 
-
-        st.markdown(f'Ads published on wg-gesucht.de in {city} in the {time_period.lower()}.', unsafe_allow_html=True)
 
         region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
         # region_ads_df = region_ads_df.head(25)
@@ -310,9 +308,8 @@ def price_evolution_per_region(df,time_period, city,
                         l = 10,        # left
                         r = 10,        # right
                         t = 25,        # top
-                        b = 0,        # bottom
-                ))
-    fig.update_layout(xaxis_title=None)
+                        b = 0),        # bottom
+                        xaxis_title=None)
 
     return fig
 
@@ -1667,10 +1664,9 @@ with tab2:
 
 
 
-
 with tab3:
     st.markdown("""
-                ### This dashboard contains everything you want to know about WGs in Germany!
+                ### This <span style="color:tomato">**dashboard**</span> contains everything you want to know about WGs in Germany!
                 To get started select below the time period, the city, and the type of market of interest and press "Show results".
                 """, unsafe_allow_html=True)
 
@@ -1704,24 +1700,22 @@ with tab3:
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
                     if st.session_state["city_filter"] == 'Germany':
-                        st.markdown(f'Price evolution of ads published on wg-gesucht.de in the top {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
+                        st.markdown(f'''
+                                    #### Price evolution of ads published on wg-gesucht.de in the top {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}.
+                                    ''', unsafe_allow_html=True)
                     else:
-                        st.markdown(f'Price evolution of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.', unsafe_allow_html=True)
+                        st.markdown(f'''
+                                    #### Price evolution of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.
+                                    ''', unsafe_allow_html=True)
 
-                col1, col2 = st.columns([1,1])
-                with col1:
+
+
+                    st.markdown("""
+                        *Values displayed here are **warm** rental prices that more accurately reflect living costs. Warm rent usually include the cold rent, water, heating and house maintenance costs. It may also include internet and TV/Radio/Internet taxes.
+                        """, unsafe_allow_html=True)
+
                     st.plotly_chart(price_evolution_per_region(df = ads_df,
                                                                 target = 'price_euros',
-                                                                time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
-                    st.plotly_chart(price_evolution_per_region(df = ads_df,
-                                                                target = 'price_per_sqm_warm',
-                                                                time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
-                with col2:
-                    st.plotly_chart(price_evolution_per_region(df = ads_df,
-                                                                target = 'cold_rent_euros',
-                                                                time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
-                    st.plotly_chart(price_evolution_per_region(df = ads_df,
-                                                                target = 'price_per_sqm_cold',
                                                                 time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
 
 
@@ -1729,6 +1723,16 @@ with tab3:
             with st.container():
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
+                    if st.session_state["city_filter"] == 'Germany':
+                        st.markdown(f'''
+                                    #### Number of ads published on wg-gesucht.de in the selected {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}
+                                    ''', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'''
+                                    #### Number of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}
+                                    ''', unsafe_allow_html=True)
+
+
                     st.plotly_chart(ads_per_region_stacked_barplot(df = df_filtered, time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
 
 
@@ -1741,15 +1745,16 @@ with tab3:
                     st.plotly_chart(ads_per_hour_line_polar(df = df_filtered, city = st.session_state["city_filter"], time_period = st.session_state["time_period"],market_type = st.session_state["market_type"]), height=400, use_container_width=True)
 
 
-            st.markdown(f"""
-                #### Rank of rental prices in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()} (€)
-                """, unsafe_allow_html=True)
 
-            ### Plotting ads per market type
-            placeholder = st.empty()
-            with placeholder.container():
+
+            ### Rank of regions rental price
+            with st.container():
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
+                    st.markdown(f"""
+                    #### Rank of rental prices in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()} (€)
+                    """, unsafe_allow_html=True)
+
                     st.pyplot(price_rank_cities(df = filter_original_data(df = ads_df,
                                             city = st.session_state["city_filter"],
                                             time_period = st.session_state["time_period"],
@@ -1757,167 +1762,215 @@ with tab3:
 
                                             city = st.session_state["city_filter"]))
 
-            st.markdown("""
-                *Values displayed here are **warm** rental prices that more accurately reflect living costs. Warm rent usually include the cold rent, water, heating and house maintenance costs. It may also include internet and TV/Radio/Internet taxes.
-                """, unsafe_allow_html=True)
 
-            st.markdown(f"""
-                #### Square-meter prices in Germany in the {st.session_state["time_period"].lower()} (€/m²)
-                """, unsafe_allow_html=True)
-
-            placeholder = st.empty()
-            with placeholder.container():
-                col1, col2, col3 = st.columns([0.1,1,0.1])
+            ### Map of sqm price around Germany
+            with st.container():
+                col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
+                    st.markdown(f"""
+                    #### Square-meter prices in Germany in the {st.session_state["time_period"].lower()} (€/m²)
+                    """, unsafe_allow_html=True)
+
                     st_data = st_folium(map_plotting(plotting_df=prepare_data_for_map(ads_df),market_type = st.session_state["market_type"]), width=700, height=500)
 
-            st.markdown("""
-                *Square-meter prices were calculated using the cold rent and assumes that all people living in a WG pay the same amount. This assumption is rarely true for individual WGs but works fine when several WGs are analysed together.
-                **Regions without a minimum of 3 ads per ZIP code are not displayed.
-                """, unsafe_allow_html=True)
+                    st.markdown("""
+                        *Square-meter prices were calculated using the cold rent and assumes that all people living in a WG pay the same amount.
+                        **Regions without a minimum of 3 ads per ZIP code are not displayed.
+                        """, unsafe_allow_html=True)
+
+
+            with st.container():
+                st.markdown(f"""
+                    #### Driving factors of rental prices
+                    """, unsafe_allow_html=True)
+
+                st.markdown(f"""
+                    *Several other factors are also relevant for rental price, including the WG structure and the renting conditions. Below I highlight several of these factors based on the analysis of square-meter cold rental prices (€/m²) in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.
+                    """, unsafe_allow_html=True)
+
+                col1, col2 = st.columns([0.5,0.4])
+                with col1:
+                    st.markdown("""
+                        1.1) Business-type WGs generally pay higher, while student-type WGs tend to pay lower rents.
+                        """, unsafe_allow_html=True)
+                with col2:
+                    st.markdown("""
+                        1.2) The number of flatmates in a WG often impacts rental prices.
+                        """, unsafe_allow_html=True)
+
+
+                col1, col2, col3 = st.columns([0.35,0.35,0.6])
+                with col1:
+                    df_foo = df_filtered[~df_filtered['wg_type_business'].isnull()]
+                    df_foo['wg_type_business'] = df_foo['wg_type_business'].map({1:'Business WGs',0:'Others'})
+                    st_data = st.pyplot(my_boxplot(df=df_foo,
+                                                    x = 'wg_type_business',
+                                                    x_title = "",
+                                                    transform_type='str',
+                                                    x_axis_rotation = 45,
+                                                    fig_height = 15))
+
+                with col2:
+                    df_foo = df_filtered[~df_filtered['wg_type_studenten'].isnull()]
+                    df_foo['wg_type_studenten'] = df_foo['wg_type_studenten'].map({1:'Students WGs',0:'Others'})
+                    df_foo = df_foo.reindex(sorted(df_foo.columns, reverse = True), axis=1)
+                    st_data = st.pyplot(my_boxplot(df=df_foo,
+                                                    x = 'wg_type_studenten',
+                                                    x_title = "",
+                                                    transform_type='str',
+                                                    x_axis_rotation = 45,
+                                                    fig_height = 15,
+                                                    order=['Others','Students WGs']))
+
+                with col3:
+                    df_foo = df_filtered.query('capacity <= 7')
+                    df_foo['n_flatmates'] = df_foo['capacity']-1
+                    st_data = st.pyplot(my_boxplot(df=df_foo,
+                                                x = 'n_flatmates',
+                                                x_title = "Number of flatmates",
+                                                transform_type='int',
+                                                font_scale=2.5))
+
+
+
+                col1, col2, col3 = st.columns([0.6,0.33,0.33])
+                with col1:
+                    st.markdown("""
+                    2.1) Renting a WG for less than a month is the cheapest option. Renting for a fixed term is often more expensive than open-end WG offers.
+                    """, unsafe_allow_html=True)
+
+                with col2:
+                    st.markdown("""
+                    2.2) WGs where the presentation of a Schufa is required for renting are generally more expensive.
+                    """, unsafe_allow_html=True)
+
+                with col3:
+                    st.markdown("""
+                    2.3) Renting from commercial landlords (companies) strongly relates to higher rent prices.
+                    """, unsafe_allow_html=True)
+
+
+                col1, col2, col3 = st.columns([0.6,0.33,0.33])
+                with col1:
+                    df_foo = df_filtered
+                    df_foo['rental_length_term'] = df_foo['rental_length_term'].map(
+                        {'30days':30,
+                        '90days':90,
+                        '180days':180,
+                        '270days':270,
+                        '365days':365,
+                        '540days':540,
+                        'plus540days':999})
+                    st_data = st.pyplot(my_boxplot(df=df_foo,
+                                                    x = 'rental_length_term',
+                                                    x_title = "Max rental length (days)",
+                                                    transform_type='int',
+                                                    font_scale=2.5))
+
+                with col2:
+                    df_foo = df_filtered[~df_filtered['schufa_needed'].isnull()]
+                    df_foo['schufa_needed'] = df_foo['schufa_needed'].map({1:'Yes',0:'No'})
+                    st_data = st.pyplot(my_boxplot(df=df_foo,
+                                                    x = 'schufa_needed',
+                                                    x_title = "Schufa required?",
+                                                    transform_type='str',
+                                                    fig_height = 20))
+
+                with col3:
+                    df_foo = df_filtered
+                    df_foo['commercial_landlord'] = df_foo['commercial_landlord'].map({1:'Commercial',0:'Private'})
+                    st_data = st.pyplot(my_boxplot(df=df_foo,
+                                                    x = 'commercial_landlord',
+                                                    x_title = "Type of landlord",
+                                                    transform_type='str',
+                                                    fig_height = 20))
+
+
+                col1, col2, col3 = st.columns([0.1,1,0.1])
+                with col2:
+                    st.markdown("""
+                    3) The type of the building strongly affects WG price. New buildings (Neubau) in particular have the most expensive offers.
+                    """, unsafe_allow_html=True)
+
+                    df_foo = df_filtered[df_filtered['building_type'].notna()]
+                    st_data = st.pyplot(my_boxplot(df=df_foo,
+                                                    x = 'building_type',
+                                                    x_title = "",
+                                                    transform_type='str',
+                                                    x_axis_rotation = 45,
+                                                    fig_height = 5,
+                                                    order='mean',
+                                                    font_scale=1.5))
 
 
 
 with tab4:
-    st.markdown(f"""
-        ## Driving factors of rental prices in Germany
-        """, unsafe_allow_html=True)
-
     st.markdown("""
-                **Besides the city in which one searches for WGs, several other factors are also relevant for rental price, including the WG structure and the renting conditions.\nHere, I highlight several of these factors based on the analysis of square-meter cold rental prices (€/m²) in Germany in the past three months.**
+                ### Here is how our <span style="color:tomato">**machine learning**</span> model predicted prices of ads posted last week
                 """, unsafe_allow_html=True)
 
     #############################
     ### Obtain main ads table ###
     #############################
     # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-    ads_df = get_data_from_db().copy()
+    ads_df = get_data_from_db()
 
 
-            #### Filter data for analysis
-    df_filtered = filter_original_data(df = ads_df,
-                                        city = 'Germany',
-                                        time_period = 'Past three months',
-                                        market_type_df = 'All')
+    ads_df['published_on'] = pd.to_datetime(ads_df['published_on'])
+    ads_df['week_number'] = ads_df['published_on'].apply(lambda x: x.strftime("%Y")) +'W'+ ads_df['published_on'].apply(lambda x: x.strftime("%V"))
 
+    week_number = '2022W52'
+
+    ## Identify monday of that week and next monday
+    monday_week = pd.to_datetime(week_number + '-1', format = "%GW%V-%w")
+    next_monday = monday_week + relativedelta(weeks=1)
+
+    ## Filter ads in current week
+    ads_df_past_weeks = ads_df[ads_df['published_on'] < monday_week]
+    ads_df_current_week = ads_df[ads_df['published_on'] >= monday_week]
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['published_on'] < next_monday]
+
+    # Not sure why I have to remove these
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['heating'] != 'Kohleofen']
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_100']
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '20_20']
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '40_40']
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_60']
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_20']
+    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '40_20']
+
+
+
+    #############################
+    ### Obtain main ads table ###
+    #############################
+
+    ### Plot price evolution
     with st.container():
-        col1, col2 = st.columns([0.5,0.4])
-        with col1:
+        col1, col2, col3 = st.columns([0.01,1,0.01])
+        with col2:
+            if st.session_state["city_filter"] == 'Germany':
+                st.markdown(f'''
+                            #### Price evolution of ads published on wg-gesucht.de in the top {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}.
+                            ''', unsafe_allow_html=True)
+            else:
+                st.markdown(f'''
+                            #### Price evolution of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.
+                            ''', unsafe_allow_html=True)
+
+
+
             st.markdown("""
-                1.1) Business-type WGs pay higher, while student-type WGs pay lower rent.
+                *Values displayed here are **warm** rental prices that more accurately reflect living costs. Warm rent usually include the cold rent, water, heating and house maintenance costs. It may also include internet and TV/Radio/Internet taxes.
                 """, unsafe_allow_html=True)
-        with col2:
-            st.markdown("""
-                1.2) The number of flatmates in a WG only slightly impacts rental prices.
-                """, unsafe_allow_html=True)
 
-
-    with st.container():
-        col1, col2, col3 = st.columns([0.35,0.35,0.6])
-        with col1:
-            df_foo = df_filtered[~df_filtered['wg_type_business'].isnull()]
-            df_foo['wg_type_business'] = df_foo['wg_type_business'].map({1:'Business WGs',0:'Others'})
-            st_data = st.pyplot(my_boxplot(df=df_foo,
-                                            x = 'wg_type_business',
-                                            x_title = "",
-                                            transform_type='str',
-                                            x_axis_rotation = 45,
-                                            fig_height = 15))
-
-        with col2:
-            df_foo = df_filtered[~df_filtered['wg_type_studenten'].isnull()]
-            df_foo['wg_type_studenten'] = df_foo['wg_type_studenten'].map({1:'Students WGs',0:'Others'})
-            df_foo = df_foo.reindex(sorted(df_foo.columns, reverse = True), axis=1)
-            st_data = st.pyplot(my_boxplot(df=df_foo,
-                                            x = 'wg_type_studenten',
-                                            x_title = "",
-                                            transform_type='str',
-                                            x_axis_rotation = 45,
-                                            fig_height = 15,
-                                            order=['Others','Students WGs']))
-
-        with col3:
-            df_foo = df_filtered.query('capacity <= 7')
-            df_foo['n_flatmates'] = df_foo['capacity']-1
-            st_data = st.pyplot(my_boxplot(df=df_foo,
-                                        x = 'n_flatmates',
-                                        x_title = "Number of flatmates",
-                                        transform_type='int',
-                                        font_scale=2.5))
+            st.plotly_chart(price_evolution_per_region(df = ads_df,
+                                                        target = 'price_euros',
+                                                        time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
 
 
 
-    with st.container():
-        col1, col2, col3 = st.columns([0.6,0.33,0.33])
-        with col1:
-            st.markdown("""
-            2.1) Renting a WG for less than a month is the cheapest option. Renting for a fixed long term (more than one year but less than 540 days) is more expensive than open-end WG offers.
-            """, unsafe_allow_html=True)
 
-        with col2:
-            st.markdown("""
-            2.2) WGs where the presentation of a Schufa is required for renting are generally more expensive.
-            """, unsafe_allow_html=True)
-
-        with col3:
-            st.markdown("""
-            2.3) Renting from commercial landlords (companies) strongly increases rent.
-            """, unsafe_allow_html=True)
-
-
-    with st.container():
-        col1, col2, col3 = st.columns([0.6,0.33,0.33])
-        with col1:
-            df_foo = df_filtered
-            df_foo['rental_length_term'] = df_foo['rental_length_term'].map(
-                {'30days':30,
-                '90days':90,
-                '180days':180,
-                '270days':270,
-                '365days':365,
-                '540days':540,
-                'plus540days':999})
-            st_data = st.pyplot(my_boxplot(df=df_foo,
-                                            x = 'rental_length_term',
-                                            x_title = "Max rental length (days)",
-                                            transform_type='int',
-                                            font_scale=2.5))
-
-        with col2:
-            df_foo = df_filtered[~df_filtered['schufa_needed'].isnull()]
-            df_foo['schufa_needed'] = df_foo['schufa_needed'].map({1:'Yes',0:'No'})
-            st_data = st.pyplot(my_boxplot(df=df_foo,
-                                            x = 'schufa_needed',
-                                            x_title = "Schufa required?",
-                                            transform_type='str',
-                                            fig_height = 20))
-
-        with col3:
-            df_foo = df_filtered
-            df_foo['commercial_landlord'] = df_foo['commercial_landlord'].map({1:'Commercial',0:'Private'})
-            st_data = st.pyplot(my_boxplot(df=df_foo,
-                                            x = 'commercial_landlord',
-                                            x_title = "Type of landlord",
-                                            transform_type='str',
-                                            fig_height = 20))
-
-
-    with st.container():
-        col1, col2, col3 = st.columns([0.1,1,0.1])
-        with col2:
-            st.markdown("""
-            3) The type of the building strongly affects WG price. New buildings (Neubau) in particular have the most expensive offers.
-            """, unsafe_allow_html=True)
-
-            df_foo = df_filtered
-            st_data = st.pyplot(my_boxplot(df=df_foo,
-                                            x = 'building_type',
-                                            x_title = "",
-                                            transform_type='str',
-                                            x_axis_rotation = 45,
-                                            fig_height = 5,
-                                            order='mean',
-                                            font_scale=1.5))
 
 
 

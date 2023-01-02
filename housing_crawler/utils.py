@@ -1023,13 +1023,17 @@ def get_data(file_name_tag='ads_OSM.csv', local_file_path=f'raw_data'):
 
     return pd.concat(csvs_list)
 
-def obtain_latest_model():
+def obtain_latest_model(model_path = False):
     directory = f'{ROOT_DIR}/model/trained_models'
     pkl_files = []
     for file in os.listdir(directory):
         if file.endswith(".pkl"):
             pkl_files.append(os.path.join(directory, file))
     pkl_files = sorted([file_name.split('/')[-1] for file_name in pkl_files])
+
+    if model_path:
+        return (pickle.load(open(f'{directory}/{pkl_files[-1]}','rb')),
+                f'{directory}/{pkl_files[-1]}')
     return pickle.load(open(f'{directory}/{pkl_files[-1]}','rb'))
 
 def meters_to_coord(m, latitude=52.52, direction='east'):

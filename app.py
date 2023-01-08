@@ -1721,11 +1721,11 @@ with tab2:
                     with st.container():
 
                         if ad_df_analysis_dict['ad_evaluation'] == 'High price':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our AI model. Therefore the offered price has a <span style="color:tomato">**HIGH**</span> price in our opinion"""
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly above the price predicted by our AI predictor. Therefore the offered price is in our opinion <span style="color:tomato">**HIGH**</span>."""
                         elif ad_df_analysis_dict['ad_evaluation'] == 'Fairly priced':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our AI model prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>"""
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be in accordance with our AI precitor prediction. Therefore the offered price is in our opinion <span style="color:tomato">**FAIRLY PRICED**</span>."""
                         elif ad_df_analysis_dict['ad_evaluation'] == 'Low price':
-                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our AI model. Therefore the offered price has a <span style="color:tomato">**LOW**</span> price in our opinion"""
+                            ad_evaluation = f"""After taking the margin of error in consideration, we consider this warm rent price to be significantly below the price predicted by our AI predictor. Therefore the offered price is in our opinion <span style="color:tomato">**LOW**</span>."""
 
                         # Display predictions
                         st.markdown(f"""
@@ -2056,15 +2056,15 @@ with tab3:
 
 with tab4:
     st.markdown("""
-                ### Here is how well our <span style="color:tomato">**artificial inteligence (AI)**</span> price predictor worked for ads posted last week
+                ### Here is how well our <span style="color:tomato">**artificial inteligence (AI)**</span> price predictor works for ads posted last week
                 """, unsafe_allow_html=True)
 
     with st.form("inputs", clear_on_submit=False):
         col1, col2 = st.columns(2)
         city_filter = col1.selectbox("City:", ['Germany'] + sorted(list(dict_city_number_wggesucht.keys())), index=0)
-        market_type = col2.selectbox("Market type:", ['All', 'Apartment', 'Single-room flat', 'WG'], index=0)
+        market_type = col2.selectbox("Market type:", ['All', 'Apartment', 'Single-room flat', 'WG'], index=3)
 
-        submitted = st.form_submit_button("Show latest AI model analysis")
+        submitted = st.form_submit_button("Show latest AI predictor analysis")
 
         if submitted:
             #############################
@@ -2087,7 +2087,7 @@ with tab4:
             ads_df = ads_df[ads_df['week_number'] != '2023W52']
 
             # Finding the latest week present in the database
-            week_number = sorted(set(ads_df['week_number']))[-2]
+            week_number = sorted(set(ads_df['week_number']))[-1]
 
             ## Identify monday of that week and next monday
             monday_week = pd.to_datetime(week_number + '-1', format = "%GW%V-%w")
@@ -2143,11 +2143,6 @@ with tab4:
                             ''', unsafe_allow_html=True)
 
 
-            st.markdown(f'''
-                            {len(ads_df_past_weeks)} ads were used for training the model until week {week_number}. For the analysis below, the warm rental prices for {len(ads_df_current_week)} ads were predicted by our model.
-                            ''', unsafe_allow_html=True)
-
-
             ### Plot price prediction
             with st.container():
                 col1, col2, col3 = st.columns([0.05,1,0.05])
@@ -2155,6 +2150,11 @@ with tab4:
                     st.markdown(f'''
                                 #### Price prediction at scale
                                 ''', unsafe_allow_html=True)
+
+
+                    st.markdown(f'''
+                                    {len(ads_df_past_weeks)} ads were used for training the AI predictor until week {week_number}. For the analysis below, the warm rental prices for {len(ads_df_current_week)} ads were predicted by the AI predictor.
+                                    ''', unsafe_allow_html=True)
 
 
                     st.plotly_chart(predicted_vs_actual_prices_ScatterPlot(df = ads_df_current_week), use_container_width=True)
@@ -2165,7 +2165,10 @@ with tab4:
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
                     st.markdown(f'''
-                                #### Difference between predicted and actual rent prices
+                                #### Difference between predicted and actual rental prices (prediction error)
+                                ''', unsafe_allow_html=True)
+                    st.markdown(f'''
+                                The prediction error strongly depends on the location of the ad. At the same time, due to less ads been available for training the AI predictor and due to the higher variability in prices, the prediction error is higher for apartments and single-room flats.
                                 ''', unsafe_allow_html=True)
 
 
@@ -2177,7 +2180,10 @@ with tab4:
                 col1, col2, col3 = st.columns([0.05,1,0.05])
                 with col2:
                     st.markdown(f'''
-                                #### Fraction of ads with predicted and actual price difference below threshold
+                                #### Fraction of ads with price prediction error within a given prediction error range
+                                ''', unsafe_allow_html=True)
+                    st.markdown(f'''
+                                Price for the majority of WG ads are predicted within a 50 € range from the actual rental price. The majority of prices for apartments and single-room flats are predicted within a 100 € range.
                                 ''', unsafe_allow_html=True)
 
                     if market_type == 'WG' or market_type == 'All':

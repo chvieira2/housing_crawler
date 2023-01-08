@@ -13,6 +13,7 @@ geopandas
 shapely
 rtree
 scikit-learn
+xgboost
 
 # Plotting
 plotly

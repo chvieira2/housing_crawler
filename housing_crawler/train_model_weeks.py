@@ -42,7 +42,9 @@ def train_models():
 
 
     # Loop through all weeks and train the model using only data from ads published before that week. Also ignores current week
-    for week_number in sorted(list(set(ads_df['week_number']))):
+    # The following line was added because there's a bug that generates data for 2023W52 and I couldn't figure out the source
+    weeks = [week for week in sorted(list(set(ads_df['week_number']))) if week != '2023W52']
+    for week_number in weeks:
 
         ## Do not train this weeks model as data hasn't been fully obtained
         if week_number == time.strftime("%Y", time.localtime()) +'W'+ time.strftime("%V", time.localtime()):

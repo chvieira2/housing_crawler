@@ -24,12 +24,19 @@ import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'. Needed to remove SettingWithCopyWarning warning when assigning new value to dataframe column
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import seaborn as sns
-# import cloudpickle
+import pickle
 import statsmodels.api as sm
 import scipy.stats as stats
 
+import folium
+from folium.plugins import Fullscreen
+import branca.colormap
+from collections import defaultdict
+from folium import GeoJson, Marker
+import geopandas as gpd
 
 from housing_crawler.params import dict_city_number_wggesucht
 from housing_crawler.string_utils import standardize_characters
@@ -187,6 +194,16 @@ def ads_per_region_stacked_barplot(df,time_period, city):
         df['temp'] = df['zip_code'].apply(lambda x: len(str(x)) > 3 and len(str(x)) < 6\
             and str(x) not in ['1234', '12345','0000', '1111', '2222', '3333', '4444','5555','6666','7777','8888','9999','00000', '11111', '22222', '33333', '44444','55555','66666','77777','88888','99999'] and not str(x).startswith('0') )
         df = df[df['temp']]
+
+        ## Filter dataframe for values occuring at least 20 times in zip_code
+        # Count the number of occurrences of each value in the column
+        counts = df['zip_code'].value_counts()
+
+        # Keep only the values that appear at least 20 times
+        to_keep = counts[counts >= 20].index
+
+        # Filter the dataframe
+        df = df[df['zip_code'].isin(to_keep)]
 
 
         region_ads_df = df[['url', stacking_by,"type_offer_simple"]].groupby([stacking_by,"type_offer_simple"]).count().rename(columns = {'url':'count'}).sort_values(by = ['count'], ascending=False).reset_index()
@@ -356,6 +373,146 @@ def ads_per_day_stacked_barplot(df,city,time_period,market_type):
                 )
     return fig
 
+def predicted_vs_actual_prices_ScatterPlot(df:pd.DataFrame):
+
+    fig= px.scatter(data_frame = df,
+                    y='predicted_price_euros',x='price_euros',
+                    color = 'type_offer_simple',
+            labels={
+                "predicted_price_euros": "Predicted rental price (€)",
+                "price_euros": "Actual rental price (€)",
+                "type_offer_simple": "Market asset"
+            },
+            template = "seaborn"
+            )
+    fig.update_layout(showlegend=True if len(set(df['type_offer_simple'])) > 1 else False,
+                      height=300,
+                        font_family="Arial",
+                        margin= dict(
+                        l = 10,        # left
+                        r = 10,        # right
+                        t = 25,        # top
+                        b = 0        # bottom
+                        )
+                        )
+
+    return fig
+
+def prediction_error_boxplot(df:pd.DataFrame):
+    if len(set(df['city'])) == 1:
+        stacking_by = 'zip_code'
+
+        df = df[df['zip_code'].notnull()]
+        df['zip_code'] = df['zip_code'].astype(int).astype(str)
+        df.sort_values('zip_code', inplace=True)
+
+        ## Filter dataframe for values occuring at least 3 times in zip_code and type_offer_simple
+        df['zip_code_type_offer_simple'] = df['zip_code'].astype(str) + df['type_offer_simple'].astype(str)
+        for col in ['zip_code','zip_code_type_offer_simple']:
+            # Count the number of occurrences of each value in the column
+            counts = df[col].value_counts()
+
+            # Keep only the values that appear at least 3 times
+            to_keep = counts[counts >= 3].index
+
+            # Filter the dataframe
+            df = df[df[col].isin(to_keep)]
+
+    else:
+        stacking_by = 'city'
+
+    fig= px.box(df, x=stacking_by, y="residuals", color='type_offer_simple',
+                labels={
+                    stacking_by: '' if stacking_by == 'city' else 'Zip code',
+                    "residuals": 'Prediction error (€)',
+                    "type_offer_simple": "Market asset"
+                },
+                template = "seaborn",
+                points=False)
+
+    if stacking_by == 'city':
+        fig.update_xaxes(categoryorder='array', categoryarray= sorted(list(dict_city_number_wggesucht.keys())))
+
+    fig.update_layout(yaxis_range=[-500,500],
+                    showlegend=True if len(set(df['type_offer_simple'])) > 1 else False,
+                      height=300,
+                        font_family="Arial",
+                        margin= dict(
+                        l = 10,        # left
+                        r = 10,        # right
+                        t = 25,        # top
+                        b = 0,        # bottom
+                ))
+
+    return fig
+
+def fraction_prediction_error_barplot(df:pd.DataFrame, market_type: str):
+    if len(set(df['city'])) == 1:
+        stacking_by = 'zip_code'
+
+        df = df[df['zip_code'].notnull()]
+        df['zip_code'] = df['zip_code'].astype(int).astype(str)
+        df.sort_values('zip_code', inplace=True)
+
+        ## Filter dataframe for values occuring at least 3 times in zip_code
+        # Count the number of occurrences of each value in the column
+        counts = df['zip_code'].value_counts()
+
+        # Keep only the values that appear at least 3 times
+        to_keep = counts[counts >= 3].index
+
+        # Filter the dataframe
+        df = df[df['zip_code'].isin(to_keep)]
+
+    else:
+        stacking_by = 'city'
+
+
+    ### Create table for plotting
+    df['residuals_abs'] = abs(df['residuals'])
+
+    count_all = df[['id', stacking_by,'type_offer_simple']].groupby([stacking_by,'type_offer_simple']).count().rename(columns={'id':'count_all'})
+    count_all['count_0'] = round(100*count_all['count_all']/count_all['count_all'],1)
+
+    for filter in [25,50,100,200,400]:
+        _foo = df[df['residuals_abs'] <=filter]
+        count_foo = _foo[['id', stacking_by,'type_offer_simple']].groupby([stacking_by,'type_offer_simple']).count().rename(columns={'id':f'count_{filter}'})
+        count_foo[f'count_{filter}'] = round(100*count_foo[f'count_{filter}']/count_all['count_all'],1)
+        count_all = pd. merge(count_all,count_foo, left_index=True, right_index=True)
+    count_all = count_all.reset_index()
+
+    ## Subtract columns for plotting
+    count_all['count_400'] = count_all['count_400']-count_all['count_200']
+    count_all['count_200'] = count_all['count_200']-count_all['count_100']
+    count_all['count_100'] = count_all['count_100']-count_all['count_50']
+    # count_all['count_50'] = count_all['count_50']-count_all['count_25']
+
+
+    ## Plotting
+    _filtered = count_all[count_all['type_offer_simple'] == market_type]
+    x = _filtered[stacking_by]
+    fig = go.Figure()
+    # fig.add_trace(go.Bar(x=x, y=_filtered['count_25'], name='25'))
+    fig.add_trace(go.Bar(x=x, y=_filtered['count_50'], name='50'))
+    fig.add_trace(go.Bar(x=x, y=_filtered['count_100'], name='100'))
+    fig.add_trace(go.Bar(x=x, y=_filtered['count_200'], name='200'))
+    fig.add_trace(go.Bar(x=x, y=_filtered['count_400'], name='400'))
+
+    fig.update_layout(height=250,
+                      barmode='stack',
+                      template = "ggplot2",
+                      legend_title="Error threshold",
+                        yaxis_title="Fraction of ads (%)",
+                        font_family="Arial",
+                        margin= dict(
+                        l = 10,        # left
+                        r = 10,        # right
+                        t = 0,        # top
+                        b = 0,        # bottom
+                ))
+
+    return fig
+
 def ads_per_hour_line_polar(df,city,time_period,market_type):
     df_time = df[['url', 'day_of_week_publication','published_at']].groupby(['day_of_week_publication','published_at']).count().rename(columns = {'url':'count'}).reset_index()
 
@@ -432,9 +589,9 @@ def price_rank_cities(df,city):
 
 
     # Filter table for groups with at least 3 entries
-    city_wg_df = city_wg_df[city_wg_df['count']>= 3]
-    city_singleroom_df = city_singleroom_df[city_singleroom_df['count']>= 3]
-    city_flathouse_df = city_flathouse_df[city_flathouse_df['count']>= 3]
+    city_wg_df = city_wg_df[city_wg_df['count']>= 20]
+    city_singleroom_df = city_singleroom_df[city_singleroom_df['count']>= 20]
+    city_flathouse_df = city_flathouse_df[city_flathouse_df['count']>= 20]
 
     # Figure
     sns.set_theme(style = "whitegrid", font_scale= 1.5)
@@ -537,13 +694,6 @@ def prepare_data_for_map(ads_df):
     return plotting_df
 
 def map_plotting(plotting_df, market_type):
-
-    import folium
-    from folium.plugins import Fullscreen
-    import branca.colormap
-    from collections import defaultdict
-    from folium import GeoJson, Marker
-    import geopandas as gpd
 
     ########### Create the map
     mapObj = folium.Map(location=(51.1657, 10.4515), zoom_start=6, max_zoom = 18, width='100%', height='100%', tiles = 'cartodbpositron')
@@ -733,7 +883,7 @@ def selectbox_to_simplified_german(feature : str):
             return feature_list if feature_list != '' else np.nan
 
 @st.cache(allow_output_mutation=True)
-def url_to_df(df: pd.DataFrame):
+def url_to_df():
     """
     Receives a URL, analyses it with crawl_ind_ad_page2 and processes it with process_ads_tables.
     Returns the dataframe ready for prediction with the model.
@@ -909,7 +1059,7 @@ st.markdown("""
 ###############################################
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["Analyse WG from url link", "Analyse my own WG",
                                         "Overview of the WG market",
-                                        'Artificial Inteligence model of WG prices', 'About'])
+                                        'Predicting WG prices with AI', 'About'])
 
 with tab1:
     st.markdown("""
@@ -1906,68 +2056,148 @@ with tab3:
 
 with tab4:
     st.markdown("""
-                ### Here is how our <span style="color:tomato">**machine learning**</span> model predicted prices of ads posted last week
+                ### Here is how well our <span style="color:tomato">**artificial inteligence (AI)**</span> price predictor worked for ads posted last week
                 """, unsafe_allow_html=True)
 
-    #############################
-    ### Obtain main ads table ###
-    #############################
-    # Copying is needed to prevent subsequent steps from modifying the cached result from get_original_data()
-    ads_df = get_data_from_db()
+    with st.form("inputs", clear_on_submit=False):
+        col1, col2 = st.columns(2)
+        city_filter = col1.selectbox("City:", ['Germany'] + sorted(list(dict_city_number_wggesucht.keys())), index=0)
+        market_type = col2.selectbox("Market type:", ['All', 'Apartment', 'Single-room flat', 'WG'], index=0)
+
+        submitted = st.form_submit_button("Show latest AI model analysis")
+
+        if submitted:
+            #############################
+            ### Obtain main ads table ###
+            #############################
+            ads_df = get_data_from_db()
+
+            ## Filter city if not 'Germany'
+            if city_filter != 'Germany':
+                ads_df = ads_df[ads_df['city'] == city_filter]
+
+            ## Filter market_type if not 'All'
+            if market_type != 'All':
+                ads_df = ads_df[ads_df['type_offer_simple'] == market_type]
+
+            ads_df['published_on'] = pd.to_datetime(ads_df['published_on'])
+            ads_df['week_number'] = ads_df['published_on'].apply(lambda x: x.strftime("%Y")) +'W'+ ads_df['published_on'].apply(lambda x: x.strftime("%V"))
+
+            # There's some bug generating data in week 2023W52 that doesn't exist and I haven't figured out how to solve it in a better way
+            ads_df = ads_df[ads_df['week_number'] != '2023W52']
+
+            # Finding the latest week present in the database
+            week_number = sorted(set(ads_df['week_number']))[-2]
+
+            ## Identify monday of that week and next monday
+            monday_week = pd.to_datetime(week_number + '-1', format = "%GW%V-%w")
+            next_monday = monday_week + relativedelta(weeks=1)
+
+            ## Filter ads in current week
+            ads_df_past_weeks = ads_df[ads_df['published_on'] < monday_week]
+            ads_df_current_week = ads_df[ads_df['published_on'] >= monday_week]
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['published_on'] < next_monday]
+
+            # Not sure why I have to remove these
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['heating'] != 'Kohleofen']
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_100']
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '20_20']
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '40_40']
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_60']
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_20']
+            ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '40_20']
 
 
-    ads_df['published_on'] = pd.to_datetime(ads_df['published_on'])
-    ads_df['week_number'] = ads_df['published_on'].apply(lambda x: x.strftime("%Y")) +'W'+ ads_df['published_on'].apply(lambda x: x.strftime("%V"))
+            ## Load weekly trained model that was trained with all data until that week
+            trained_model = pickle.load(open(f'{ROOT_DIR}/model/trained_models/PipelineTrained_allcities_price_euros_LogTarget_{week_number}.pkl','rb'))
 
-    week_number = '2022W52'
-
-    ## Identify monday of that week and next monday
-    monday_week = pd.to_datetime(week_number + '-1', format = "%GW%V-%w")
-    next_monday = monday_week + relativedelta(weeks=1)
-
-    ## Filter ads in current week
-    ads_df_past_weeks = ads_df[ads_df['published_on'] < monday_week]
-    ads_df_current_week = ads_df[ads_df['published_on'] >= monday_week]
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['published_on'] < next_monday]
-
-    # Not sure why I have to remove these
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['heating'] != 'Kohleofen']
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_100']
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '20_20']
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '40_40']
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_60']
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '60_20']
-    ads_df_current_week = ads_df_current_week[ads_df_current_week['age_category_searched'] != '40_20']
+            ## Predict current week
+            ads_df_current_week['predicted_price_euros'] = trained_model.predict(ads_df_current_week)
+            ads_df_current_week['predicted_price_euros'] = round(ads_df_current_week['predicted_price_euros'],0)
 
 
+            # Calculate residuals
+            y_pred = ads_df_current_week['predicted_price_euros']
+            y_true = ads_df_current_week['price_euros']
+            residuals = y_true - y_pred
+            ads_df_current_week['residuals'] = residuals
 
-    #############################
-    ### Obtain main ads table ###
-    #############################
 
-    ### Plot price evolution
-    with st.container():
-        col1, col2, col3 = st.columns([0.01,1,0.01])
-        with col2:
-            if st.session_state["city_filter"] == 'Germany':
+            ### Simplify table
+            ads_df_current_week = ads_df_current_week[['id',
+                                                       'city',
+                                                       'type_offer_simple',
+                                                       'zip_code',
+                                                       'price_euros',
+                                                       'predicted_price_euros',
+                                                       'residuals']]
+
+
+            if city_filter == 'Germany':
                 st.markdown(f'''
-                            #### Price evolution of ads published on wg-gesucht.de in the top {len(dict_city_number_wggesucht.keys())} cities in Germany in the {st.session_state["time_period"].lower()}.
+                            ### Price prediction for ads published on wg-gesucht.de between {monday_week.strftime("%d.%m.%Y")} and {next_monday.strftime("%d.%m.%Y")} in the top {len(dict_city_number_wggesucht.keys())} cities in Germany
                             ''', unsafe_allow_html=True)
             else:
                 st.markdown(f'''
-                            #### Price evolution of ads published on wg-gesucht.de in {st.session_state["city_filter"]} in the {st.session_state["time_period"].lower()}.
+                            ### Price prediction for ads published on wg-gesucht.de between {monday_week.strftime("%d.%m.%Y")} and {next_monday.strftime("%d.%m.%Y")} in {city_filter}
                             ''', unsafe_allow_html=True)
 
 
+            st.markdown(f'''
+                            {len(ads_df_past_weeks)} ads were used for training the model until week {week_number}. For the analysis below, the warm rental prices for {len(ads_df_current_week)} ads were predicted by our model.
+                            ''', unsafe_allow_html=True)
 
-            st.markdown("""
-                *Values displayed here are **warm** rental prices that more accurately reflect living costs. Warm rent usually include the cold rent, water, heating and house maintenance costs. It may also include internet and TV/Radio/Internet taxes.
-                """, unsafe_allow_html=True)
 
-            st.plotly_chart(price_evolution_per_region(df = ads_df,
-                                                        target = 'price_euros',
-                                                        time_period = st.session_state["time_period"], city = st.session_state["city_filter"]), use_container_width=True)
+            ### Plot price prediction
+            with st.container():
+                col1, col2, col3 = st.columns([0.05,1,0.05])
+                with col2:
+                    st.markdown(f'''
+                                #### Price prediction at scale
+                                ''', unsafe_allow_html=True)
 
+
+                    st.plotly_chart(predicted_vs_actual_prices_ScatterPlot(df = ads_df_current_week), use_container_width=True)
+
+
+            ### Plot price prediction error boxplot
+            with st.container():
+                col1, col2, col3 = st.columns([0.05,1,0.05])
+                with col2:
+                    st.markdown(f'''
+                                #### Difference between predicted and actual rent prices
+                                ''', unsafe_allow_html=True)
+
+
+                    st.plotly_chart(prediction_error_boxplot(df = ads_df_current_week), use_container_width=True)
+
+
+            ### Prediction error fractions
+            with st.container():
+                col1, col2, col3 = st.columns([0.05,1,0.05])
+                with col2:
+                    st.markdown(f'''
+                                #### Fraction of ads with predicted and actual price difference below threshold
+                                ''', unsafe_allow_html=True)
+
+                    if market_type == 'WG' or market_type == 'All':
+                        st.markdown(f'''
+                                    #### WGs
+                                    ''', unsafe_allow_html=True)
+                        st.plotly_chart(fraction_prediction_error_barplot(df = ads_df_current_week,
+                                                                        market_type = 'WG'), use_container_width=True)
+                    if market_type == 'Single-room flat' or market_type == 'All':
+                        st.markdown(f'''
+                                #### Single-room flats
+                                ''', unsafe_allow_html=True)
+                        st.plotly_chart(fraction_prediction_error_barplot(df = ads_df_current_week,
+                                                                      market_type = 'Single-room flat'), use_container_width=True)
+                    if market_type == 'Apartment' or market_type == 'All':
+                        st.markdown(f'''
+                                #### Apartments
+                                ''', unsafe_allow_html=True)
+                        st.plotly_chart(fraction_prediction_error_barplot(df = ads_df_current_week,
+                                                                      market_type = 'Apartment'), use_container_width=True)
 
 
 

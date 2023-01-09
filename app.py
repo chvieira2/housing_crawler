@@ -2087,7 +2087,7 @@ with tab4:
             ads_df = ads_df[ads_df['week_number'] != '2023W52']
 
             # Finding the latest week present in the database
-            week_number = sorted(set(ads_df['week_number']))[-1]
+            week_number = sorted(set(ads_df['week_number']))[-2]
 
             ## Identify monday of that week and next monday
             monday_week = pd.to_datetime(week_number + '-1', format = "%GW%V-%w")
@@ -2110,6 +2110,11 @@ with tab4:
 
             ## Load weekly trained model that was trained with all data until that week
             trained_model = pickle.load(open(f'{ROOT_DIR}/model/trained_models/PipelineTrained_allcities_price_euros_LogTarget_{week_number}.pkl','rb'))
+
+            # new_attrs = ['feature_types]#['grow_policy', 'max_bin', 'eval_metric', 'callbacks', 'early_stopping_rounds', 'max_cat_to_onehot', 'max_leaves', 'sampling_method']
+
+            # for attr in new_attrs:
+            #     setattr(xgb_model, attr, None)
 
             ## Predict current week
             ads_df_current_week['predicted_price_euros'] = trained_model.predict(ads_df_current_week)

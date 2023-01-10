@@ -10,6 +10,7 @@ import urllib.parse
 def fix_weird_address(address, weird_patterns = ['Am S Bahnhof', 'xxx', 'xx', 'Nahe', 'nahe', 'Nähe','nähe','Close To', 'Nearby','nearby', 'Close To', 'Close to', 'close to', 'close To']):
     ## Add here any other type of weird naming on addresses
     for weird in weird_patterns:
+        address = str(address) if address == address else np.nan
         address = address.replace(weird, '').strip().replace('  ', ' ')
 
     # Correcting mispelling input from users is a never ending job....

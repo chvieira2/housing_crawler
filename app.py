@@ -883,7 +883,7 @@ def selectbox_to_simplified_german(feature : str):
             return feature_list if feature_list != '' else np.nan
 
 @st.cache(allow_output_mutation=True)
-def url_to_df():
+def url_to_df(url):
     """
     Receives a URL, analyses it with crawl_ind_ad_page2 and processes it with process_ads_tables.
     Returns the dataframe ready for prediction with the model.

@@ -1054,5 +1054,8 @@ def meters_to_coord(m, latitude=52.52, direction='east'):
 
 
 if __name__ == "__main__":
+    from housing_crawler.ads_table_processing import process_ads_tables
 
-    print(crawl_ind_ad_page2('https://www.wg-gesucht.de/wg-zimmer-in-Hannover-Sudstadt.9060306.html'))
+    df = crawl_ind_ad_page2('https://www.wg-gesucht.de/wg-zimmer-in-Berlin-Friedrichsfelde.9138352.html')
+    ## Process ad_df for analysis
+    print(process_ads_tables(input_ads_df = df, save_processed = False, df_feats_tag = 'city'))

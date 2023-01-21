@@ -882,7 +882,6 @@ def selectbox_to_simplified_german(feature : str):
             feature_list =  feature[0]
             return feature_list if feature_list != '' else np.nan
 
-@st.cache(allow_output_mutation=True)
 def url_to_df(url_for_search):
     """
     Receives a URL, analyses it with crawl_ind_ad_page2 and processes it with process_ads_tables.
@@ -1023,6 +1022,7 @@ def analyse_df_ad(ads_db: pd.DataFrame, ad_df: pd.DataFrame):
 
     # Predict expected cold_rent_euros
     try:
+        #### Currently the prediction isn't working with XGBoost and this will always fail
         analysis_dict['cold_rent_pred'] = pred_from_df(ad_df = ad_df_processed)
 
         # Calculate extra costs
@@ -1100,7 +1100,6 @@ with tab1:
                 ## Process url to obtain table for prediction
                 ad_df_processed = None
                 try:
-                    print(url)
                     ad_df_processed = url_to_df(url_for_search = url)
                     st.success('Analysis was successful!', icon="✅")
 
@@ -2206,9 +2205,6 @@ with tab4:
                                 ''', unsafe_allow_html=True)
                         st.plotly_chart(fraction_prediction_error_barplot(df = ads_df_current_week,
                                                                       market_type = 'Apartment'), use_container_width=True)
-
-
-
 
 
 

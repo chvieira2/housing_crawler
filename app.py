@@ -883,13 +883,14 @@ def selectbox_to_simplified_german(feature : str):
             return feature_list if feature_list != '' else np.nan
 
 @st.cache(allow_output_mutation=True)
-def url_to_df(url):
+def url_to_df(url_for_search):
     """
     Receives a URL, analyses it with crawl_ind_ad_page2 and processes it with process_ads_tables.
     Returns the dataframe ready for prediction with the model.
     """
+    df = crawl_ind_ad_page2(url_for_search)
     ## Process ad_df for analysis
-    return process_ads_tables(input_ads_df = crawl_ind_ad_page2(url), save_processed = False, df_feats_tag = 'city')
+    return process_ads_tables(input_ads_df = df, save_processed = False, df_feats_tag = 'city')
 
 def pred_from_df(ad_df):
     """
@@ -1099,7 +1100,8 @@ with tab1:
                 ## Process url to obtain table for prediction
                 ad_df_processed = None
                 try:
-                    ad_df_processed = url_to_df(url)
+                    print(url)
+                    ad_df_processed = url_to_df(url_for_search = url)
                     st.success('Analysis was successful!', icon="✅")
 
                 except Exception as err:
